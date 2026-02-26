@@ -1,57 +1,71 @@
+import os
 import sys
 import pathlib
 
 sys.path.append(str(pathlib.Path(__file__).parent))
+from backend.torch_patch import apply_torch_load_patch
+apply_torch_load_patch()
 
+from dotenv import load_dotenv
+load_dotenv()  
+from transformers import logging
+logging.set_verbosity_error()
 from modal import App, Image, asgi_app, Volume, enter, Secret
 from backend.config import (
-    MODAL_APP_NAME, 
-    MODAL_GPU, 
-    MODAL_MEMORY, 
-    MODAL_TIMEOUT, 
-    MODAL_CONTAINER_IDLE_TIMEOUT, 
+    MODAL_APP_NAME,
+    MODAL_GPU,
+    MODAL_MEMORY,
+    MODAL_TIMEOUT,
+    MODAL_CONTAINER_IDLE_TIMEOUT,
     WHISPER_MODEL
 )
 
 app = App(MODAL_APP_NAME)
-
 image = (
     Image.debian_slim(python_version="3.11")
     .apt_install("git", "ffmpeg", "libsndfile1")
-    # PyTorch with CUDA support
     .pip_install(
         "torch>=2.0.0",
         "torchaudio>=2.0.0",
         extra_options="--index-url https://download.pytorch.org/whl/cu124"
     )
-    # Transformers ecosystem
     .pip_install(
+        "ctranslate2>=4.5.0",
+        "whisperx",
+        "lightning",
+        "python-dotenv",
         "transformers>=4.35.0",
         "accelerate>=0.25.0",
         "sentencepiece>=0.1.99",
-    )
-    # WhisperX (includes faster-whisper + pyannote VAD)
-    .pip_install("whisperx")
-    # Web server
-    .pip_install(
+        "safetensors>=0.4.0",
+        "protobuf>=3.20.0",
+        "peft>=0.7.0",
+        "groq>=0.4.0",
         "fastapi>=0.104.0",
         "uvicorn>=0.24.0",
         "websockets>=12.0",
         "aiofiles>=23.0.0",
-    )
-    # Scientific computing
-    .pip_install(
         "numpy>=1.24.0",
         "scipy>=1.11.0",
         "soundfile>=0.12.0",
     )
-    # Utilities
-    .pip_install("safetensors>=0.4.0", "protobuf>=3.20.0")
-    # Post-processing (BARTpho syllable correction)
-    .pip_install("peft>=0.7.0")
-    # LLM (Groq API for context priming + summary)
-    .pip_install("groq>=0.4.0")
-    # Add project files
+    .env({
+        "LD_LIBRARY_PATH": "/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:"
+                           "/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:"
+                           "/usr/local/lib/python3.11/site-packages/nvidia/cuda_runtime/lib",
+    })
+    .run_commands(
+        "pip uninstall -y torchcodec 2>/dev/null || true",
+        # Run Lightning checkpoint upgrade directly, patching torch.load to bypass weights_only=True
+        "python -c \""
+        "import torch, sys; "
+        "orig_load = torch.load; "
+        "torch.load = lambda *a, **k: orig_load(*a, **{**k, 'weights_only': False}); "
+        "sys.argv = ['upgrade', '--map-to-cpu', '/usr/local/lib/python3.11/site-packages/whisperx/assets/pytorch_model.bin']; "
+        "from lightning.pytorch.utilities.upgrade_checkpoint import main; "
+        "main()"
+        "\"",
+    )
     .add_local_dir("backend", remote_path="/root/backend")
     .add_local_dir("frontend", remote_path="/root/frontend")
 )
@@ -66,7 +80,7 @@ cache = Volume.from_name("asr-model-cache", create_if_missing=True)
     scaledown_window=MODAL_CONTAINER_IDLE_TIMEOUT,
     image=image,
     volumes={"/cache": cache},
-    secrets=[Secret.from_name("groq-api-key")],
+    secrets=[Secret.from_dotenv()],  
 )
 class ASR:
     @enter()
@@ -79,26 +93,27 @@ class ASR:
         import os
         import time
         import asyncio
-        
+        import warnings
+
+        warnings.filterwarnings("ignore", message=".*not sharded.*")
+
         sys.path.append("/root")
         os.environ["HF_HOME"] = "/cache/huggingface"
-        
-        # Apply PyTorch patches for WhisperX/pyannote compatibility
-        from backend.torch_patch import apply_torch_load_patch
-        apply_torch_load_patch()
-        
-        print("[Container] Initializing segment-based ASR system (WhisperX)...")
+
+        # Debug: verify secrets are injected
+        has_groq = bool(os.environ.get("GROQ_API_KEY"))
+        has_hf = bool(os.environ.get("HF_TOKEN"))
+        print(f"[Container] Secrets: GROQ_API_KEY={'✓' if has_groq else '✗'} | HF_TOKEN={'✓' if has_hf else '✗'}")
+
+        print("[Container] Initializing ASR system (WhisperX)...")
         start = time.time()
-        
+
         from backend.handler import ASRService
-        
         self.service = ASRService()
         asyncio.run(self.service.init())
-        
+
         elapsed = time.time() - start
-        print(f"[Container] ✓ Ready in {elapsed:.1f}s")
-        print(f"[Container] Model: {WHISPER_MODEL} | GPU: {MODAL_GPU}")
-        print(f"[Container] Architecture: Segment-based with adaptive VAD")
+        print(f"[Container] ✓ Ready in {elapsed:.1f}s | {WHISPER_MODEL} | {MODAL_GPU}")
 
     @asgi_app()
     def app(self):
@@ -151,19 +166,9 @@ class ASR:
             """Health check and system info"""
             return JSONResponse({
                 "status": "online",
-                "version": "6.1",
-                "architecture": "segment-based",
                 "model": WHISPER_MODEL,
                 "gpu": MODAL_GPU,
                 "uptime_seconds": int(time.time() - start_time),
-                "features": [
-                    "adaptive_vad",
-                    "segment_buffering",
-                    "local_agreement",
-                    "hallucination_filter",
-                    "bartpho_correction",
-                    "groq_llm"
-                ]
             })
 
         @web_app.post("/api/expand-keywords")
@@ -249,5 +254,4 @@ class ASR:
             StaticFiles(directory="/root/frontend", html=True), 
             name="frontend"
         )
-        
         return web_app

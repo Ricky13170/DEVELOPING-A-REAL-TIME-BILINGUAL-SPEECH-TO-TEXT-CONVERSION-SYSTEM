@@ -1,8 +1,10 @@
 # Core ML
 torch
 torchaudio
+whisperx
+lightning
 faster-whisper
-ctranslate2
+ctranslate2>=4.5.0
 transformers
 accelerate
 sentencepiece

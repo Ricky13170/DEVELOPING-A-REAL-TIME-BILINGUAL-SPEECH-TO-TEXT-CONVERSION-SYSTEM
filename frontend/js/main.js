@@ -43,16 +43,36 @@ class ASRApp {
     }
 
     async checkServerStatus() {
+        const statusEl = document.getElementById('loadingStatus');
+        const hintEl = document.querySelector('.loading-hint');
+        const spinnerEl = document.getElementById('loadingSpinner');
+
         try {
-            this.uiMgr.showNotification('Connecting...');
+            if (statusEl) statusEl.textContent = 'Connecting to server...';
+            if (hintEl) hintEl.textContent = 'Models are loading, this may take a moment';
+
             const res = await fetch('/api/status');
             if (res.ok) {
                 const data = await res.json();
                 this.serverReady = true;
+
+                // Update loading state to ready
+                if (spinnerEl) spinnerEl.classList.add('hidden');
+                if (statusEl) {
+                    statusEl.textContent = `✓ Ready — ${data.model || 'Whisper'}`;
+                    statusEl.classList.add('ready');
+                }
+                if (hintEl) hintEl.textContent = 'Click the record button to start transcribing';
+
                 this.uiMgr.showNotification(`Ready: ${data.model || 'Whisper'}`);
             }
         } catch (e) {
+            if (statusEl) statusEl.textContent = 'Server is starting up...';
+            if (hintEl) hintEl.textContent = 'Cold start may take 30-60 seconds';
             this.uiMgr.showNotification('Server loading...');
+
+            // Retry after 5 seconds
+            setTimeout(() => this.checkServerStatus(), 5000);
         }
     }
 

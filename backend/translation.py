@@ -1,9 +1,7 @@
 import logging
 from typing import Optional
 import torch
-
 logger = logging.getLogger(__name__)
-
 
 class NLLBTranslator:
     def __init__(self, model_name: str = "facebook/nllb-200-3.3B",
@@ -37,6 +35,7 @@ class NLLBTranslator:
             cache_dir=self.cache_dir,
             dtype=torch.float16,
             device_map="auto",
+            low_cpu_mem_usage=True,
         )
         
         self.model.eval()

@@ -3,9 +3,7 @@ import logging
 import asyncio
 from typing import Optional
 from backend.config import GROQ_API_KEY, GROQ_MODEL, GROQ_TIMEOUT
-
 logger = logging.getLogger(__name__)
-
 
 class GroqService: 
     def __init__(self, api_key: Optional[str] = None, model: str = GROQ_MODEL):
@@ -46,12 +44,10 @@ class GroqService:
         lang_name = "Vietnamese" if language == "vi" else "English"
         
         prompt = f"""Given this lecture topic: "{topic}"
-
-Generate 15-20 technical keywords and phrases that are likely to appear in a {lang_name} lecture about this topic.
-Include: technical terms, abbreviations, proper nouns, and domain-specific vocabulary.
-For Vietnamese topics, include both Vietnamese terms and their English equivalents.
-
-Return ONLY the keywords as a comma-separated list. No explanations."""
+        Generate 15-20 technical keywords and phrases that are likely to appear in a {lang_name} lecture about this topic.
+        Include: technical terms, abbreviations, proper nouns, and domain-specific vocabulary.
+        For Vietnamese topics, include both Vietnamese terms and their English equivalents.
+        Return ONLY the keywords as a comma-separated list. No explanations."""
 
         try:
             loop = asyncio.get_event_loop()
@@ -89,19 +85,19 @@ Return ONLY the keywords as a comma-separated list. No explanations."""
         
         prompt = f"""{topic_context}Below is a lecture transcript. Create a concise, structured summary in Markdown format.
 
-Include:
-1. **Key Points** (3-5 bullet points)
-2. **Technical Terms** mentioned (with brief definitions if possible)
-3. **Action Items / Takeaways** (if any)
+        Include:
+        1. **Key Points** (3-5 bullet points)
+        2. **Technical Terms** mentioned (with brief definitions if possible)
+        3. **Action Items / Takeaways** (if any)
 
-Keep it concise and useful for a student reviewing notes.
+        Keep it concise and useful for a student reviewing notes.
 
-Transcript:
----
-{transcript}
----
+        Transcript:
+        ---
+        {transcript}
+        ---
 
-Summary:"""
+        Summary:"""
 
         try:
             loop = asyncio.get_event_loop()
@@ -121,12 +117,32 @@ Summary:"""
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": "You are a helpful academic assistant specialized in lecture comprehension."},
+                {"role": "system", 
+                "content": """
+                    You are a highly skilled Academic Assistant specializing in lecture comprehension and educational synthesis. 
+                    Your goal is to process lecture transcripts or notes and transform them into structured learning materials. 
+
+                    ### Instructions:
+                    1. **Core Analysis**: Identify the central thesis, key concepts, and supporting arguments.
+                    2. **Terminology**: Extract specialized vocabulary and provide concise, context-specific definitions.
+                    3. **Structured Summary**: Use a hierarchical format (Main Headings > Sub-points) to summarize the content.
+                    4. **Active Learning**: Generate 3-5 high-level reflection questions to test the user's deep understanding.
+
+                    ### Constraints:
+                    - Maintain an objective, formal, and scholarly tone.
+                    - If the input contains ambiguous points, highlight them for clarification.
+                    - Use Markdown for clear visual hierarchy (bolding key terms, using bullet points).
+
+                    ### Output Structure:
+                    - ## Executive Summary
+                    - ## Key Concepts & Definitions
+                    - ## Detailed Breakdown
+                    - ## Critical Thinking Questions
+                """},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3,
+            temperature=0,
             max_tokens=1024,
             timeout=GROQ_TIMEOUT,
         )
-        
         return response.choices[0].message.content.strip()

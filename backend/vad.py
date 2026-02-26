@@ -3,9 +3,7 @@ import numpy as np
 import torch
 import logging
 from backend.config import SAMPLE_RATE
-
 logger = logging.getLogger(__name__)
-
 
 class VADManager:
     """Pyannote neural VAD for streaming speech detection.
@@ -43,7 +41,6 @@ class VADManager:
                 f"Pyannote model not found at {model_fp}. "
                 "Make sure whisperx is installed with its assets."
             )
-        
         return model_fp
     
     def load(self):

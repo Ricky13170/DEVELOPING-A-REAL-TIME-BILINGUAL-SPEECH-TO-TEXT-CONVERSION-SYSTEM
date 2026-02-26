@@ -123,9 +123,10 @@
           </div>
 
           <div class="panel-content" id="panelContent">
-            <div class="empty-state">
-              <p>Click the record button to start</p>
-              <p>Transcription will appear here</p>
+            <div class="empty-state" id="emptyState">
+              <div class="loading-spinner" id="loadingSpinner"></div>
+              <p class="loading-status" id="loadingStatus">Connecting to server...</p>
+              <p class="loading-hint">Models are loading, this may take a moment</p>
             </div>
           </div>
         </div>
@@ -133,7 +134,7 @@
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-header">
             <h3>History</h3>
-            <a href="recordings.html" class="sidebar-link">View All</a>
+            <a href="recordings.html" class="btn btn-sm btn-secondary sidebar-btn">View All</a>
           </div>
           <div class="sidebar-content" id="recordingsList">
             <div class="empty-state">

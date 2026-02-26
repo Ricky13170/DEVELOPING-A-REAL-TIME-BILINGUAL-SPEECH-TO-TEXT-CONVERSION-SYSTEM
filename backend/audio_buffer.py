@@ -1,6 +1,5 @@
 import numpy as np
 from backend.config import SAMPLE_RATE
-
 class AudioBuffer:
     def __init__(self):
         self.chunks = []  

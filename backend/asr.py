@@ -3,12 +3,9 @@ import logging
 from dataclasses import replace as dataclass_replace
 from backend.audio_normalizer import AdaptiveNormalizer
 from backend.torch_patch import apply_torch_load_patch, suppress_stdout
-
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
-
-
 class WhisperASR:
     def __init__(self, model_size="large-v3", language=None, device="cuda", cache_dir=None):
         self.model_size = model_size

@@ -6,7 +6,6 @@ from backend.config import (
 from backend.asr import WhisperASR
 from backend.translation import NLLBTranslator
 
-
 def download_models():
     print("Pre-downloading models...")
     

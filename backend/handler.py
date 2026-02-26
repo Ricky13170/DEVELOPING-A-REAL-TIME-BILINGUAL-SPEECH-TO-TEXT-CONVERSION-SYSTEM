@@ -5,7 +5,6 @@ import numpy as np
 import time
 import re
 from datetime import datetime
-
 from backend.config import (
     SAMPLE_RATE, MAX_SEGMENT_SEC, OVERLAP_SEC, SILENCE_LIMIT,
     MIN_DECODE_SEC, AGREEMENT_N, HALLUCINATION_HISTORY_SIZE,
@@ -20,7 +19,6 @@ from backend.vad import VADManager
 from backend.speech_segment_buffer import SpeechSegmentBuffer
 from backend.local_agreement import LocalAgreement
 from backend.hallucination_filter import HallucinationFilter
-
 
 class ASRService:
     """Service manages shared models across sessions"""

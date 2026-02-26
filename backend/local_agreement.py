@@ -1,7 +1,5 @@
 import logging
-
 logger = logging.getLogger(__name__)
-
 class LocalAgreement:
     def __init__(self, n: int = 2):
         """
@@ -19,7 +17,6 @@ class LocalAgreement:
             return "", ""
         
         words = new_text.strip().split()
-        
         self.history.append(words)
         
         if len(self.history) > self.n:
@@ -39,7 +36,6 @@ class LocalAgreement:
             else:
                 unstable_text = ""
         else:
-
             stable_text = ""
             unstable_text = new_text
         
@@ -51,19 +47,15 @@ class LocalAgreement:
         
         if len(word_lists) == 1:
             return word_lists[0]
-        
         min_len = min(len(wl) for wl in word_lists)
         
         common = []
         for i in range(min_len):
-
             words_at_i = [wl[i] for wl in word_lists]
-            
             if all(w == words_at_i[0] for w in words_at_i):
                 common.append(words_at_i[0])
             else:
                 break
-        
         return common
     
     def reset(self):
@@ -74,6 +66,5 @@ class LocalAgreement:
         """Get current stable text without adding new input"""
         if len(self.history) < self.n:
             return ""
-        
         common = self._find_common_prefix(self.history[-self.n:])
         return " ".join(common)

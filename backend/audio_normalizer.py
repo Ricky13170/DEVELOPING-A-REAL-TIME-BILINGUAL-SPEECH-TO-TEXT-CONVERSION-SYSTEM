@@ -1,9 +1,7 @@
 import numpy as np
 from scipy.signal import butter, lfilter
 import logging
-
 logger = logging.getLogger(__name__)
-
 
 class WhisperAudioNormalizer:
     def __init__(self, target_dB: float = -20.0, sample_rate: int = 16000):

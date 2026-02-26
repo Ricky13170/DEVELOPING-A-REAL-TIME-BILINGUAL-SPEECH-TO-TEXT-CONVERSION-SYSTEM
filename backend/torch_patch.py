@@ -4,9 +4,7 @@ import sys
 import io
 import os
 from contextlib import contextmanager
-
 _patched = False
-
 
 @contextmanager
 def suppress_stdout():
@@ -32,7 +30,6 @@ def suppress_stdout():
         for name, level in _saved_levels.items():
             logging.getLogger(name).setLevel(level)
 
-
 def apply_torch_load_patch():
     global _patched
     
@@ -56,7 +53,6 @@ def apply_torch_load_patch():
     warnings.filterwarnings("ignore", message=".*Model was trained with torch.*")
     warnings.filterwarnings("ignore", message=".*Some weights of.*were not initialized.*")
     warnings.filterwarnings("ignore", message=".*Some weights of.*not used.*")
-    warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
     warnings.filterwarnings("ignore", message=".*TensorFloat-32.*")
     warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
     warnings.filterwarnings("ignore", message=".*torchaudio.*deprecated.*")
@@ -66,6 +62,7 @@ def apply_torch_load_patch():
     warnings.filterwarnings("ignore", message=".*not sharded.*")
     warnings.filterwarnings("ignore", message=".*Lightning automatically upgraded.*")
     warnings.filterwarnings("ignore", message=".*lightning.*upgraded.*")
+    warnings.filterwarnings("ignore", message=".*torchcodec.*")
     
     for logger_name in [
         "transformers.modeling_utils",

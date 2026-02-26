@@ -1,7 +1,6 @@
 import hashlib
 from collections import deque
 import logging
-
 logger = logging.getLogger(__name__)
 
 class HallucinationFilter:

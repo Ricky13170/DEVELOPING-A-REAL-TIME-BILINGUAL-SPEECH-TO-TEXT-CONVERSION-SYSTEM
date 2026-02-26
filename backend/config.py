@@ -1,3 +1,5 @@
+import os
+
 # Modal
 MODAL_APP_NAME = "asr-thesis"
 MODAL_GPU = "A100"
@@ -43,8 +45,7 @@ AGREEMENT_N = 2
 HALLUCINATION_HISTORY_SIZE = 5
 
 # BARTpho Post-processing
-import os
-ENABLE_BARTPHO = True  # Set False to skip BARTpho post-processing
+ENABLE_BARTPHO = True
 BARTPHO_ADAPTER = "522H0134-NguyenNhatHuy/bartpho-syllable-correction"
 BARTPHO_DEVICE = "cuda"
 
@@ -52,4 +53,7 @@ BARTPHO_DEVICE = "cuda"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = "llama-3.1-8b-instant"
 GROQ_TIMEOUT = 10
-AUTO_SUMMARY_MIN_DURATION = 120  
+AUTO_SUMMARY_MIN_DURATION = 120
+
+# HuggingFace
+HF_TOKEN = os.environ.get("HF_TOKEN", "")

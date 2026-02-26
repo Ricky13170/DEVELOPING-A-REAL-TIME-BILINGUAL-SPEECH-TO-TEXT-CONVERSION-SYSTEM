@@ -2,12 +2,10 @@ import re
 import logging
 from typing import Optional, List, Tuple
 import torch
-
 logger = logging.getLogger(__name__)
 
 BARTPHO_ADAPTER = "522H0134-NguyenNhatHuy/bartpho-syllable-correction"
 BARTPHO_BASE = "vinai/bartpho-syllable"
-
 
 # English Detection — Three Layers
 # Layer 1: Vietnamese diacritics → always Vietnamese
@@ -208,7 +206,7 @@ class BARTphoCorrector:
             base_model = AutoModelForSeq2SeqLM.from_pretrained(
                 BARTPHO_BASE,
                 cache_dir=self.cache_dir,
-                torch_dtype=torch.float16,
+                dtype=torch.float16,
             )
             self.model = PeftModel.from_pretrained(
                 base_model,
