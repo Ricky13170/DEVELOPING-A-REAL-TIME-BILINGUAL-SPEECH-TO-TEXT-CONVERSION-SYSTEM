@@ -5,7 +5,11 @@
   <meta charset="UTF-8">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ASR Thesis</title>
+  <title>ASR Thesis — Real-time Bilingual Speech-to-Text</title>
+  <meta name="description" content="Real-time bilingual speech-to-text with multi-language support and AI-powered transcription.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -16,6 +20,7 @@
         <div class="toolbar-left">
           <h1 class="logo-text">ASR Thesis</h1>
 
+          <!-- Audio Source -->
           <div class="dropdown">
             <button class="dropdown-btn" id="audioSourceBtn">
               <span id="audioSourceText">Microphone</span>
@@ -29,7 +34,14 @@
                 </div>
               </div>
               <div class="dropdown-divider"></div>
-              <div class="dropdown-item" data-source="computer">Computer Audio</div>
+              <div class="dropdown-item" data-source="computer">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:middle">
+                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+                Computer Audio
+              </div>
             </div>
           </div>
 
@@ -46,12 +58,22 @@
             <div class="meter-bar-h"></div>
           </div>
 
+          <!-- Context button — next to record -->
+          <button class="btn-icon" id="contextBtn" title="Context Settings">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg>
+          </button>
+
           <button class="record-btn" id="recordBtn" title="Record">
-            <svg viewBox="0 0 24 24" fill="currentColor">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="record-icon-mic">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
               <path
                 d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
             </svg>
+            <div class="record-loading-spinner hidden" id="recordLoadingSpinner"></div>
           </button>
         </div>
 
@@ -70,53 +92,74 @@
       </header>
 
       <div class="content">
+        <!-- Screen Share Preview (hidden by default) -->
+        <div class="screen-panel hidden" id="screenPanel">
+          <div class="screen-header">
+            <span class="screen-title">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+              Screen Share
+            </span>
+            <button class="btn-icon btn-icon-sm" id="stopScreenBtn" title="Stop sharing">✕</button>
+          </div>
+          <div class="screen-video-wrap" id="screenVideoWrap">
+            <video id="screenPreview" autoplay muted playsinline></video>
+          </div>
+        </div>
+
+        <!-- Panel Resizer (drag to resize when screen panel visible) -->
+        <div class="panel-resizer" id="panelResizer"></div>
+
+        <!-- Transcript Panel -->
         <div class="transcript-panel">
           <div class="panel-header">
-            <span class="panel-title">Real-time Transcription</span>
+            <!-- Language Selectors -->
+            <div class="lang-group">
+              <div class="dropdown lang-dropdown" id="srcLangDropdown">
+                <button class="lang-btn" id="srcLangBtn">
+                  <span class="lang-flag" id="srcLangFlag">🇻🇳</span>
+                  <span class="lang-name" id="srcLangName">Vietnamese</span>
+                  <span class="dropdown-arrow"></span>
+                </button>
+                <div class="dropdown-menu lang-menu" id="srcLangMenu"></div>
+              </div>
+
+              <button class="swap-btn" id="swapLangBtn" title="Swap languages">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="17 1 21 5 17 9" />
+                  <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                  <polyline points="7 23 3 19 7 15" />
+                  <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                </svg>
+              </button>
+
+              <div class="dropdown lang-dropdown" id="tgtLangDropdown">
+                <button class="lang-btn" id="tgtLangBtn">
+                  <span class="lang-flag" id="tgtLangFlag">🇺🇸</span>
+                  <span class="lang-name" id="tgtLangName">English</span>
+                  <span class="dropdown-arrow"></span>
+                </button>
+                <div class="dropdown-menu lang-menu" id="tgtLangMenu"></div>
+              </div>
+            </div>
+
             <div class="panel-actions">
+              <button class="btn-icon" id="displayModeBtn" title="Toggle: Mixed / Split">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="3" y1="6" x2="21" y2="6"/>
+                  <line x1="3" y1="12" x2="21" y2="12"/>
+                  <line x1="3" y1="18" x2="15" y2="18"/>
+                </svg>
+              </button>
               <button class="btn-icon" id="fontDecrease" title="Smaller">A-</button>
               <button class="btn-icon" id="fontIncrease" title="Larger">A+</button>
               <button class="btn-icon" id="clearBtn" title="Clear">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6" />
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-              <button class="btn-icon" id="contextBtn" title="Context">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="3" />
-                  <path
-                    d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-                </svg>
-              </button>
-              <button class="btn-icon" id="summarizeBtn" title="Summarize">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                  <polyline points="10 9 9 9 8 9"/>
-                </svg>
-              </button>
-              <div class="dropdown">
-                <button class="btn-icon" id="exportBtn" title="Export">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                </button>
-                <div class="dropdown-menu" id="exportDropdown">
-                  <div class="dropdown-item" data-export="srt">SRT (Subtitles)</div>
-                  <div class="dropdown-item" data-export="vtt">VTT (WebVTT)</div>
-                  <div class="dropdown-item" data-export="txt">TXT (Plain text)</div>
-                  <div class="dropdown-item" data-export="json">JSON</div>
-                </div>
-              </div>
-              <button class="btn-icon" id="copyBtn" title="Copy">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
               </button>
             </div>
@@ -134,7 +177,14 @@
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-header">
             <h3>History</h3>
-            <a href="recordings.html" class="btn btn-sm btn-secondary sidebar-btn">View All</a>
+            <a href="recordings.html" class="sidebar-btn">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              View All
+            </a>
           </div>
           <div class="sidebar-content" id="recordingsList">
             <div class="empty-state">
@@ -146,10 +196,11 @@
     </main>
   </div>
 
+  <!-- Context Settings Modal -->
   <div class="modal-overlay" id="contextModal">
     <div class="modal">
       <div class="modal-header">
-        <h3>Context Settings</h3>
+        <h3>⚙️ Context Settings</h3>
         <button class="modal-close" id="closeModal" title="Close">×</button>
       </div>
       <div class="modal-body">
@@ -159,32 +210,32 @@
             <span class="input-icon">✨</span>
             <input type="text" id="lectureTopic" placeholder="Enter lecture topic to boost accuracy..." maxlength="200">
           </div>
-          <small class="form-hint">AI will expand this into keywords to improve recognition</small>
+          <small class="form-hint">AI will expand this into keywords and context to improve recognition</small>
         </div>
         <div class="form-group">
           <label>Keywords</label>
-          <div class="input-with-btn">
-            <input type="text" id="keywords" placeholder="AI, machine learning, neural network...">
-            <button class="btn btn-sm btn-accent" id="aiGenerateBtn" title="AI Generate from topic">⚡ Generate</button>
-          </div>
+          <input type="text" id="keywords" placeholder="AI, machine learning, neural network...">
         </div>
         <div class="form-group">
           <label>Context</label>
           <textarea id="context" placeholder="Lecture about artificial intelligence..."></textarea>
+          <small class="form-hint">Provides richer context for better speech recognition accuracy</small>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="clearContextBtn">Clear</button>
+        <button class="btn btn-accent" id="aiContextBtn">Generate</button>
         <button class="btn btn-primary" id="saveContextBtn">Save</button>
       </div>
     </div>
   </div>
 
+  <!-- Clear Confirm Modal -->
   <div class="modal-overlay" id="clearModal">
     <div class="modal">
       <div class="modal-header">
         <h3>Clear Transcript</h3>
-        <button class="modal-close" title="Close">x</button>
+        <button class="modal-close" title="Close">×</button>
       </div>
       <div class="modal-body">
         <p>Clear the current transcript display?</p>
@@ -197,11 +248,12 @@
     </div>
   </div>
 
+  <!-- Delete Recording Modal -->
   <div class="modal-overlay" id="deleteRecordingModal">
     <div class="modal">
       <div class="modal-header">
         <h3>Delete Recording</h3>
-        <button class="modal-close" id="deleteModalClose" title="Close">x</button>
+        <button class="modal-close" id="deleteModalClose" title="Close">×</button>
       </div>
       <div class="modal-body">
         <p>Delete this recording permanently?</p>
@@ -210,23 +262,6 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" id="deleteModalCancel">Cancel</button>
         <button class="btn btn-danger" id="deleteModalConfirm">Delete</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Summary modal (Groq auto-summary) -->
-  <div class="modal-overlay" id="summaryModal">
-    <div class="modal modal-lg">
-      <div class="modal-header">
-        <h3>📝 Lecture Summary</h3>
-        <button class="modal-close" id="closeSummaryModal" title="Close">×</button>
-      </div>
-      <div class="modal-body">
-        <div id="summaryContent" class="summary-content"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="copySummaryBtn">Copy</button>
-        <button class="btn btn-primary" id="closeSummaryBtn">Close</button>
       </div>
     </div>
   </div>

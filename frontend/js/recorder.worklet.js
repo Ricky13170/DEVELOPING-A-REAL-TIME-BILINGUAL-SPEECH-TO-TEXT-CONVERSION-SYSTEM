@@ -1,17 +1,6 @@
 class RecorderWorklet extends AudioWorkletProcessor {
     constructor() {
         super();
-        this.bufferSize = 4096;
-        this.buffer = new Float32Array(this.bufferSize);
-        this.bufferIndex = 0;
-    }
-
-    calculateRMS(data) {
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) {
-            sum += data[i] * data[i];
-        }
-        return Math.sqrt(sum / data.length);
     }
 
     process(inputs, outputs, parameters) {
@@ -19,13 +8,19 @@ class RecorderWorklet extends AudioWorkletProcessor {
         if (input && input.length > 0) {
             const channelData = input[0];
 
-            const rms = this.calculateRMS(channelData);
+            // RMS for audio level meter (computed on audio thread to keep main thread free)
+            let sum = 0;
+            for (let i = 0; i < channelData.length; i++) {
+                sum += channelData[i] * channelData[i];
+            }
+            const rms = Math.sqrt(sum / channelData.length);
 
-            this.port.postMessage({
-                command: 'process',
-                inputBuffer: channelData,
-                rms: rms
-            });
+            // Copy buffer so we can transfer ownership (zero-copy to main thread)
+            const copy = channelData.slice();
+            this.port.postMessage(
+                { command: 'process', inputBuffer: copy, rms },
+                [copy.buffer]  // Transferable — avoids structured clone
+            );
         }
         return true;
     }

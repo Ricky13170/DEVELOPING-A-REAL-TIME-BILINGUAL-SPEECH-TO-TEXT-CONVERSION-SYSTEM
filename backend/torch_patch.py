@@ -4,6 +4,13 @@ import sys
 import io
 import os
 from contextlib import contextmanager
+
+# Suppress torchcodec warning BEFORE pyannote is ever imported.
+# pyannote.audio.core.io fires this at import-time (module scope).
+# The warning message contains newlines, so message= with .* won't match
+# (re.match doesn't use DOTALL). Use module= to target the source file instead.
+warnings.filterwarnings("ignore", category=UserWarning, module=r"pyannote\.audio\.core\.io")
+
 _patched = False
 
 @contextmanager
@@ -62,7 +69,7 @@ def apply_torch_load_patch():
     warnings.filterwarnings("ignore", message=".*not sharded.*")
     warnings.filterwarnings("ignore", message=".*Lightning automatically upgraded.*")
     warnings.filterwarnings("ignore", message=".*lightning.*upgraded.*")
-    warnings.filterwarnings("ignore", message=".*torchcodec.*")
+    warnings.filterwarnings("ignore", category=UserWarning, module=r"pyannote\.audio\.core\.io")
     
     for logger_name in [
         "transformers.modeling_utils",

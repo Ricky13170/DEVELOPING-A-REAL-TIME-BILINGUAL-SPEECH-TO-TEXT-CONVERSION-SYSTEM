@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+import threading
 from dataclasses import replace as dataclass_replace
 from backend.audio_normalizer import AdaptiveNormalizer
 from backend.torch_patch import apply_torch_load_patch, suppress_stdout
@@ -13,6 +14,7 @@ class WhisperASR:
         self.device = device
         self.cache_dir = cache_dir
         self.model = None
+        self._lock = threading.Lock()
         
         self.normalizer = AdaptiveNormalizer(target_dB=-20.0, sample_rate=SAMPLE_RATE)
         logger.info("[ASR] WhisperX with adaptive audio normalization enabled")
@@ -41,12 +43,13 @@ class WhisperASR:
         
         logger.info("WhisperX loaded")
 
-    def transcribe(self, audio: np.ndarray, prompt: str = None) -> tuple:
+    def transcribe(self, audio: np.ndarray, prompt: str = None, language: str = None) -> tuple:
         """Transcribe audio using WhisperX.
         
         Args:
             audio: float32 audio at 16kHz
             prompt: Context prompt (recent transcript history)
+            language: Override language for this call (e.g. 'vi', 'en', None=auto)
             
         Returns:
             (text, confidence) — same interface as before
@@ -62,24 +65,28 @@ class WhisperASR:
         if normalized_audio.dtype != np.float32:
             normalized_audio = normalized_audio.astype(np.float32)
         
-        original_options = None
-        if prompt and hasattr(self.model, 'options'):
-            original_options = self.model.options
-            self.model.options = dataclass_replace(
-                self.model.options, initial_prompt=prompt
-            )
-        
-        try:
-            # Transcribe with WhisperX (batch_size=1 for streaming segments)
-            result = self.model.transcribe(
-                normalized_audio,
-                batch_size=1,
-                language=self.language,
-            )
-        finally:
-            # Restore original options (model is shared across sessions)
-            if original_options is not None:
-                self.model.options = original_options
+        with self._lock:
+            original_options = None
+            if prompt and hasattr(self.model, 'options'):
+                original_options = self.model.options
+                self.model.options = dataclass_replace(
+                    self.model.options, initial_prompt=prompt
+                )
+            
+            # Use per-call language override, fall back to model default
+            effective_language = language if language is not None else self.language
+            
+            try:
+                # Transcribe with WhisperX (batch_size=1 for streaming segments)
+                result = self.model.transcribe(
+                    normalized_audio,
+                    batch_size=1,
+                    language=effective_language,
+                )
+            finally:
+                # Restore original options (model is shared across sessions)
+                if original_options is not None:
+                    self.model.options = original_options
         
         # Collect segments and calculate confidence
         text_parts = []
@@ -105,41 +112,4 @@ class WhisperASR:
         
         return text, conf
 
-
-class StreamingASRProcessor:
-    """Streaming processor for audio chunks"""
-    
-    def __init__(self, asr: WhisperASR, context_size: int = 3):
-        self.asr = asr
-        self.context_size = context_size
-        self.audio_buffer = np.array([], dtype=np.float32)
-        self.context_history = []
-
-    def init(self):
-        self.audio_buffer = np.array([], dtype=np.float32)
-        self.context_history = []
-
-    def insert_audio(self, audio: np.ndarray):
-        self.audio_buffer = np.concatenate([self.audio_buffer, audio])
-
-    def process_partial(self, prompt: str = None) -> tuple:
-        if len(self.audio_buffer) < SAMPLE_RATE:
-            return "", 0.0
-        
-        text, conf = self.asr.transcribe(self.audio_buffer, prompt)
-        return text, conf
-
-    def process_final(self, prompt: str = None) -> tuple:
-        if len(self.audio_buffer) < 4000:
-            self.audio_buffer = np.array([], dtype=np.float32)
-            return "", 0.0
-        
-        text, conf = self.asr.transcribe(self.audio_buffer, prompt)
-        
-        if text:
-            self.context_history.append(text)
-            if len(self.context_history) > self.context_size * 2:
-                self.context_history = self.context_history[-self.context_size:]
-        
-        self.audio_buffer = np.array([], dtype=np.float32)
         return text, conf

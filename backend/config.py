@@ -12,11 +12,6 @@ WHISPER_MODEL = "large-v3"
 WHISPER_LANGUAGE = "vi"  
 ASR_DEVICE = "cuda"
 
-# VAD (Energy-based)
-VAD_THRESHOLD = 0.01
-MIN_SILENCE_DURATION = 0.6
-MAX_BUFFER_DURATION = 8.0
-
 # NLLB Translation
 NLLB_MODEL = "facebook/nllb-200-3.3B"
 NLLB_SRC_LANG = "vie_Latn"
@@ -43,11 +38,6 @@ AGREEMENT_N = 2
 
 # Hallucination Filter
 HALLUCINATION_HISTORY_SIZE = 5
-
-# BARTpho Post-processing
-ENABLE_BARTPHO = True
-BARTPHO_ADAPTER = "522H0134-NguyenNhatHuy/bartpho-syllable-correction"
-BARTPHO_DEVICE = "cuda"
 
 # Groq LLM (context priming + auto summary)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")

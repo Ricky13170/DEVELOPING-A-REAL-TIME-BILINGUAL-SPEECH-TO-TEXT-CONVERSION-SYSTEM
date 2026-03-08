@@ -18,10 +18,11 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     color: var(--text);
     background: var(--bg-gray);
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
 }
 
 .app {
@@ -38,11 +39,11 @@ body {
 .toolbar {
     background: white;
     border-bottom: 1px solid var(--border);
-    padding: 1rem 1.5rem;
+    padding: 0.75rem 1.5rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 2rem;
+    gap: 1rem;
 }
 
 .toolbar-left,
@@ -271,11 +272,16 @@ body {
 }
 
 .panel-header {
-    padding: 1rem 1.5rem;
+    padding: 0.5rem 1rem;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.panel-header .lang-group {
+    margin: 0;
 }
 
 .panel-title {
@@ -318,7 +324,8 @@ body {
     font-weight: 600;
 }
 
-.vi-text {
+.vi-text,
+.src-text {
     font-size: 1.1rem;
     line-height: 1.7;
     color: #000000;
@@ -328,7 +335,8 @@ body {
     white-space: pre-wrap;
 }
 
-.en-text {
+.en-text,
+.tgt-text {
     font-size: 1rem;
     line-height: 1.6;
     color: #000000;
@@ -342,6 +350,79 @@ body {
     white-space: pre-wrap;
 }
 
+/* ═══════════ SPLIT MODE ═══════════ */
+
+.split-row {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+}
+
+.split-row:last-child {
+    border-bottom: none;
+}
+
+.split-source {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    font-size: 1.1rem;
+    line-height: 1.7;
+    font-weight: 700;
+    color: #000;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    border-right: 1px solid var(--border);
+}
+
+.split-target {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    line-height: 1.6;
+    font-weight: 600;
+    color: #000;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.split-row.partial .split-source {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+/* ═══════════ PANEL RESIZER ═══════════ */
+
+.panel-resizer {
+    width: 6px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    flex-shrink: 0;
+    display: none;
+    z-index: 5;
+}
+
+.panel-resizer::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 40px;
+    background: var(--border);
+    border-radius: 1px;
+    transition: background 0.2s, height 0.2s;
+}
+
+.panel-resizer:hover::after {
+    background: var(--primary);
+    height: 60px;
+}
+
+.screen-panel:not(.hidden) + .panel-resizer {
+    display: block;
+}
+
 .transcript-segment.partial .vi-text {
     color: #000000;
     font-weight: 700;
@@ -352,27 +433,39 @@ body {
     font-weight: 500;
 }
 
-.font-sm .vi-text {
+.font-sm .vi-text,
+.font-sm .src-text,
+.font-sm .split-source {
     font-size: 0.9rem;
 }
 
-.font-sm .en-text {
+.font-sm .en-text,
+.font-sm .tgt-text,
+.font-sm .split-target {
     font-size: 0.85rem;
 }
 
-.font-lg .vi-text {
+.font-lg .vi-text,
+.font-lg .src-text,
+.font-lg .split-source {
     font-size: 1.2rem;
 }
 
-.font-lg .en-text {
+.font-lg .en-text,
+.font-lg .tgt-text,
+.font-lg .split-target {
     font-size: 1.1rem;
 }
 
-.font-xl .vi-text {
+.font-xl .vi-text,
+.font-xl .src-text,
+.font-xl .split-source {
     font-size: 1.4rem;
 }
 
-.font-xl .en-text {
+.font-xl .en-text,
+.font-xl .tgt-text,
+.font-xl .split-target {
     font-size: 1.3rem;
 }
 
@@ -415,13 +508,32 @@ body {
     font-weight: 600;
 }
 
-.sidebar-btn {
+.sidebar-link {
+    font-size: 0.9rem;
+    color: var(--primary);
     text-decoration: none;
+}
+
+.sidebar-link:hover {
+    text-decoration: underline;
+}
+
+.sidebar-btn {
     display: inline-flex;
     align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--primary);
+    text-decoration: none;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+    background: rgba(59, 130, 246, 0.06);
 }
 
 .sidebar-btn:hover {
+    background: rgba(59, 130, 246, 0.12);
     text-decoration: none;
 }
 
@@ -824,6 +936,26 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
+}
+
+.content-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.content-actions .export-dropdown {
+    position: relative;
+}
+
+.content-actions .export-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    bottom: auto;
+    left: auto;
+    min-width: 180px;
 }
 
 .content-title-group h2 {
@@ -837,14 +969,22 @@ body {
     color: var(--text-light);
 }
 
-.back-btn {
-    text-decoration: none;
+.back-link {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.3rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--primary);
+    text-decoration: none;
+    padding: 0.4rem 0.85rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+    background: rgba(59, 130, 246, 0.06);
 }
 
-.back-btn:hover {
+.back-link:hover {
+    background: rgba(59, 130, 246, 0.12);
     text-decoration: none;
 }
 
@@ -858,10 +998,23 @@ body {
 .transcript-container-full {
     background: white;
     border-radius: 8px;
-    padding: 2rem;
+    padding: 1.5rem 2rem;
     min-height: 100%;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     border: 1px solid var(--border);
+}
+
+.transcript-container-full .transcript-segment {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding: 1rem 0;
+    margin-bottom: 0;
+}
+
+.transcript-container-full .transcript-segment:last-child {
+    border-bottom: none;
 }
 
 .transcript-block {
@@ -953,7 +1106,8 @@ body {
     align-items: stretch;
 }
 
-.input-with-btn input {
+.input-with-btn input,
+.input-with-btn textarea {
     flex: 1;
 }
 
@@ -1022,7 +1176,231 @@ body {
 }
 
 /* ===========================================
-   Loading Spinner & Status
+   Export Dropdown Fix — opens upward
+   =========================================== */
+
+.export-dropdown {
+    position: relative;
+}
+
+.export-menu {
+    right: 0;
+    left: auto;
+    bottom: calc(100% + 6px);
+    top: auto;
+    min-width: 180px;
+}
+
+/* ===========================================
+   Record Button Loading Spinner
+   =========================================== */
+
+.record-btn {
+    position: relative;
+}
+
+.record-loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-top: 3px solid white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    position: absolute;
+}
+
+.record-loading-spinner.hidden {
+    display: none;
+}
+
+.record-btn.loading .record-icon-mic {
+    display: none;
+}
+
+.record-btn.loading .record-loading-spinner {
+    display: block;
+}
+
+/* ===========================================
+   Language Selectors
+   =========================================== */
+
+.lang-group {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: var(--bg-gray);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.2rem;
+}
+
+.lang-dropdown {
+    position: relative;
+}
+
+.lang-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.lang-btn:hover {
+    background: #f3f4f6;
+}
+
+.lang-flag {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.lang-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    min-width: 200px;
+    max-height: 320px;
+    overflow-y: auto;
+    display: none;
+    z-index: 200;
+}
+
+.lang-menu.active {
+    display: block;
+    animation: menuSlide 0.15s ease;
+}
+
+@keyframes menuSlide {
+    from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.lang-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.lang-menu .dropdown-item.active {
+    background: rgba(59, 130, 246, 0.08);
+    color: var(--primary);
+}
+
+.lang-menu .dropdown-item .item-flag { font-size: 1.1rem; }
+.lang-menu .dropdown-item .item-name { flex: 1; }
+.lang-menu .dropdown-item .item-native { color: var(--text-muted); font-size: 0.75rem; }
+
+.swap-btn {
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-light);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.swap-btn:hover {
+    color: var(--primary);
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.swap-btn:active {
+    transform: rotate(180deg);
+}
+
+/* ===========================================
+   Screen Share Panel
+   =========================================== */
+
+.screen-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-gray);
+    border-right: 1px solid var(--border);
+    max-width: 60%;
+    min-width: 320px;
+}
+
+.screen-panel.hidden {
+    display: none;
+}
+
+.screen-header {
+    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: white;
+}
+
+.screen-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-light);
+}
+
+.screen-video-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    background: #000;
+}
+
+.screen-video-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.btn-icon-sm {
+    width: 28px;
+    height: 28px;
+    background: var(--bg-gray);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    transition: all 0.2s;
+}
+
+.btn-icon-sm:hover {
+    background: #e5e7eb;
+}
+
+/* ===========================================
+   Loading Spinner
    =========================================== */
 
 .loading-spinner {
@@ -1058,4 +1436,81 @@ body {
 
 .loading-status.ready {
     color: var(--success);
+}
+
+/* ===========================================
+   Subtitle Overlay (for screen share)
+   =========================================== */
+
+.subtitle-overlay {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 90%;
+    text-align: center;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+}
+
+.subtitle-overlay.visible { opacity: 1; }
+.subtitle-overlay.fade-out { opacity: 0; }
+
+.subtitle-source {
+    background: rgba(0, 0, 0, 0.75);
+    color: #ffffff;
+    padding: 0.5rem 1.2rem;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1.5;
+    margin-bottom: 4px;
+}
+
+.subtitle-target {
+    background: rgba(59, 130, 246, 0.85);
+    color: #ffffff;
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.4;
+    display: none;
+}
+
+/* ===========================================
+   Responsive: Screen Share + Language
+   =========================================== */
+
+@media (max-width: 768px) {
+    .lang-btn .lang-name {
+        display: none;
+    }
+
+    .screen-panel {
+        max-width: 100%;
+        min-width: 0;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .content {
+        flex-direction: column;
+    }
+
+    .panel-resizer {
+        display: none !important;
+    }
+
+    .split-row {
+        flex-direction: column;
+    }
+
+    .split-source {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
 }

@@ -33,7 +33,7 @@ class NLLBTranslator:
         self.model = AutoModelForSeq2SeqLM.from_pretrained(
             self.model_name,
             cache_dir=self.cache_dir,
-            dtype=torch.float16,
+            torch_dtype=torch.float16,
             device_map="auto",
             low_cpu_mem_usage=True,
         )
@@ -42,14 +42,29 @@ class NLLBTranslator:
         self.is_loaded = True
         logger.info("NLLB loaded")
 
-    def translate(self, text: str, max_length: int = 256) -> str:
+    def translate(self, text: str, max_length: int = 256, 
+                   src_lang: str = None, tgt_lang: str = None) -> str:
+        """Translate text with optional per-call language override.
+        
+        Args:
+            text: Source text to translate
+            max_length: Max output token length
+            src_lang: Override source language (NLLB code e.g. 'vie_Latn')
+            tgt_lang: Override target language (NLLB code e.g. 'eng_Latn')
+        """
         if not text or not text.strip():
             return ""
         
         if not self.is_loaded:
             self.load_model()
         
+        effective_src = src_lang or self.src_lang
+        effective_tgt = tgt_lang or self.tgt_lang
+        
         try:
+            # Re-set tokenizer source language for this call
+            self.tokenizer.src_lang = effective_src
+            
             inputs = self.tokenizer(
                 text,
                 return_tensors="pt",
@@ -61,7 +76,7 @@ class NLLBTranslator:
             device = next(self.model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}
             
-            tgt_lang_id = self.tokenizer.convert_tokens_to_ids(self.tgt_lang)
+            tgt_lang_id = self.tokenizer.convert_tokens_to_ids(effective_tgt)
             
             with torch.no_grad():
                 outputs = self.model.generate(

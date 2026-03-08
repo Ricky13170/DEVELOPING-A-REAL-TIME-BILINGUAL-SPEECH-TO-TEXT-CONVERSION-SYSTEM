@@ -39,7 +39,6 @@ image = (
         "sentencepiece>=0.1.99",
         "safetensors>=0.4.0",
         "protobuf>=3.20.0",
-        "peft>=0.7.0",
         "groq>=0.4.0",
         "fastapi>=0.104.0",
         "uvicorn>=0.24.0",
@@ -187,6 +186,45 @@ class ASR:
                 keywords = await self.service.groq.expand_keywords(topic)
                 return JSONResponse({"keywords": keywords, "topic": topic})
                 
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @web_app.post("/api/generate-context")
+        async def generate_context(request: Request):
+            """Generate keywords + context paragraph from topic using Groq LLM"""
+            try:
+                body = await request.json()
+                topic = body.get("topic", "").strip()
+                
+                if not topic:
+                    return JSONResponse({"error": "No topic provided"}, status_code=400)
+                
+                if not self.service.groq or not self.service.groq.is_available:
+                    return JSONResponse({"error": "Groq service not available"}, status_code=503)
+                
+                result = await self.service.groq.generate_context(topic)
+                return JSONResponse({**result, "topic": topic})
+                
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @web_app.post("/api/summarize")
+        async def summarize(request: Request):
+            """Summarize transcript text using Groq LLM"""
+            try:
+                body = await request.json()
+                text = body.get("text", "").strip()
+                topic = body.get("topic", "").strip()
+
+                if not text:
+                    return JSONResponse({"error": "No text provided"}, status_code=400)
+
+                if not self.service.groq or not self.service.groq.is_available:
+                    return JSONResponse({"error": "Groq service not available"}, status_code=503)
+
+                summary = await self.service.groq.summarize_lecture(text, topic)
+                return JSONResponse({"summary": summary, "topic": topic})
+
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
 

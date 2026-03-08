@@ -61,6 +61,51 @@ class GroqService:
         except Exception as e:
             logger.error(f"[Groq] expand_keywords error: {e}")
             return ""
+
+    async def generate_context(self, topic: str, language: str = "vi") -> dict:
+        """
+        Generate both keywords AND a context paragraph for ASR priming.
+        
+        Returns:
+            {"keywords": "comma,separated,list", "context": "2-3 sentence description"}
+        """
+        if not self.is_available or not topic.strip():
+            return {"keywords": "", "context": ""}
+        
+        lang_name = "Vietnamese" if language == "vi" else "English"
+        
+        prompt = f"""Given this lecture topic: "{topic}"
+
+Generate TWO things:
+
+1. KEYWORDS: 15-20 technical keywords/phrases likely to appear in a {lang_name} lecture about this topic. Include technical terms, abbreviations, proper nouns, and domain-specific vocabulary. For Vietnamese topics, include both Vietnamese and English terms.
+
+2. CONTEXT: A brief 2-3 sentence description of what this lecture covers. Write it as a natural paragraph that captures the key themes and terminology. This will be used as context for speech recognition.
+
+Return in this EXACT format (no markdown, no extra text):
+KEYWORDS: keyword1, keyword2, keyword3, ...
+CONTEXT: Brief description paragraph here."""
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, self._chat, prompt)
+            
+            keywords = ""
+            context = ""
+            
+            for line in result.strip().split('\n'):
+                line = line.strip()
+                if line.upper().startswith('KEYWORDS:'):
+                    keywords = line[len('KEYWORDS:'):].strip().replace('"', '')
+                elif line.upper().startswith('CONTEXT:'):
+                    context = line[len('CONTEXT:'):].strip().replace('"', '')
+            
+            logger.info(f"[Groq] Context for '{topic[:30]}': keywords={len(keywords.split(','))} items, context={len(context)} chars")
+            return {"keywords": keywords, "context": context}
+            
+        except Exception as e:
+            logger.error(f"[Groq] generate_context error: {e}")
+            return {"keywords": "", "context": ""}
     
     async def summarize_lecture(self, transcript: str, topic: str = "") -> str:
         """

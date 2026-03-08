@@ -25,7 +25,24 @@
           <h2 id="recordingTitle">Select a recording</h2>
           <div class="content-subtitle" id="recordingSubtitle"></div>
         </div>
-        <a href="./index.html" class="btn btn-sm btn-secondary back-btn">← Back to Live</a>
+        <div class="content-actions">
+          <button class="btn-icon" id="summarizeBtn" title="Summarize">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </button>
+          <a href="./index.html" class="back-link">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="19" y1="12" x2="5" y2="12"/>
+              <polyline points="12 19 5 12 12 5"/>
+            </svg>
+            Back to Live
+          </a>
+        </div>
       </div>
 
       <div class="content-body" id="transcriptContent">
@@ -73,6 +90,25 @@
       </div>
     </div>
   </div>
+
+  <!-- Summary Modal -->
+  <div class="modal-overlay" id="summaryModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>Lecture Summary</h3>
+        <button class="modal-close" id="closeSummaryModal" title="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="summaryContent" class="summary-content"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="copySummaryBtn">Copy</button>
+        <button class="btn btn-primary" id="closeSummaryBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notification" id="notification"></div>
 
   <script type="module" src="js/recordings.js"></script>
 </body>

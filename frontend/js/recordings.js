@@ -6,6 +6,11 @@ class RecordingsManager {
         this.contentEl = document.getElementById('transcriptContent');
         this.titleEl = document.getElementById('recordingTitle');
         this.subtitleEl = document.getElementById('recordingSubtitle');
+        this.summarizeBtn = document.getElementById('summarizeBtn');
+        this.summaryModal = document.getElementById('summaryModal');
+        this.summaryContent = document.getElementById('summaryContent');
+        this.notification = document.getElementById('notification');
+
         this.selectedId = null;
         this.recordings = [];
         this.menuOpenId = null;
@@ -15,6 +20,8 @@ class RecordingsManager {
         this.loadRecordings();
         this.setupListeners();
         this.setupModals();
+        this.setupSummarize();
+
 
         const preSelected = localStorage.getItem('selectedRecordingId');
         if (preSelected) {
@@ -273,13 +280,13 @@ class RecordingsManager {
         }
 
         container.innerHTML = transcript.map((item, i) => {
-            const vi = item.vi || item.source || '';
-            const en = item.en || item.target || '';
+            const src = item.source || item.vi || '';
+            const tgt = item.target || item.en || '';
 
             return `
-                <div class="transcript-block">
-                    <div class="vi-text">${vi}</div>
-                    ${en ? `<div class="en-text">${en}</div>` : ''}
+                <div class="transcript-segment final">
+                    <div class="src-text">${src}</div>
+                    ${tgt ? `<div class="tgt-text">${tgt}</div>` : ''}
                 </div>
             `;
         }).join('');
@@ -293,6 +300,177 @@ class RecordingsManager {
         if (container) {
             container.innerHTML = '<div class="empty-state"><p>Select a recording</p></div>';
         }
+    }
+
+    /* ═══════════ COPY ═══════════ */
+
+    setupCopy() {
+        if (this.copyBtn) {
+            this.copyBtn.onclick = () => this.copyTranscript();
+        }
+    }
+
+    async copyTranscript() {
+        const rec = this.recordings.find(r => String(r.id) === String(this.selectedId));
+        if (!rec || !rec.transcript || rec.transcript.length === 0) {
+            this.showNotification('No transcript to copy');
+            return;
+        }
+        const lines = rec.transcript.map(t => {
+            const src = t.source || t.vi || '';
+            const tgt = t.target || t.en || '';
+            return tgt ? `${src}\n${tgt}` : src;
+        }).filter(s => s.trim());
+        try {
+            await navigator.clipboard.writeText(lines.join('\n\n'));
+            this.showNotification('Copied!');
+        } catch (e) {
+            this.showNotification('Copy failed');
+        }
+    }
+
+    /* ═══════════ EXPORT ═══════════ */
+
+    setupExport() {
+        if (this.exportBtn) {
+            this.exportBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.exportMenu?.classList.toggle('active');
+            };
+        }
+        if (this.exportMenu) {
+            this.exportMenu.querySelectorAll('[data-format]').forEach(item => {
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    this.exportAs(item.dataset.format);
+                    this.exportMenu.classList.remove('active');
+                };
+            });
+        }
+        document.addEventListener('click', () => {
+            this.exportMenu?.classList.remove('active');
+        });
+    }
+
+    exportAs(format) {
+        const rec = this.recordings.find(r => String(r.id) === String(this.selectedId));
+        if (!rec || !rec.transcript) {
+            this.showNotification('No transcript to export');
+            return;
+        }
+        const transcript = rec.transcript.map(t => ({
+            source: t.source || t.vi || '',
+            target: t.target || t.en || ''
+        }));
+        try {
+            switch (format) {
+                case 'srt': exportSRT(transcript); break;
+                case 'vtt': exportVTT(transcript); break;
+                case 'txt': exportTXT(transcript); break;
+                case 'json': exportJSON(transcript); break;
+            }
+            this.showNotification(`Exported as ${format.toUpperCase()}`);
+        } catch (e) {
+            this.showNotification('Export failed');
+        }
+    }
+
+    /* ═══════════ SUMMARIZE ═══════════ */
+
+    setupSummarize() {
+        if (this.summarizeBtn) {
+            this.summarizeBtn.onclick = () => this.summarizeSelected();
+        }
+
+        const closeSummaryBtn = document.getElementById('closeSummaryBtn');
+        const closeSummaryX = document.getElementById('closeSummaryModal');
+        const copySummaryBtn = document.getElementById('copySummaryBtn');
+        const closeSummary = () => this.summaryModal?.classList.remove('active');
+
+        if (closeSummaryBtn) closeSummaryBtn.onclick = closeSummary;
+        if (closeSummaryX) closeSummaryX.onclick = closeSummary;
+        if (copySummaryBtn) {
+            copySummaryBtn.onclick = async () => {
+                const text = this.summaryContent?.innerText;
+                if (text) {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        this.showNotification('Summary copied!');
+                    } catch (e) {
+                        this.showNotification('Copy failed');
+                    }
+                }
+            };
+        }
+        if (this.summaryModal) {
+            this.summaryModal.onclick = (e) => {
+                if (e.target === this.summaryModal) closeSummary();
+            };
+        }
+    }
+
+    async summarizeSelected() {
+        const rec = this.recordings.find(r => String(r.id) === String(this.selectedId));
+        if (!rec || !rec.transcript || rec.transcript.length === 0) {
+            this.showNotification('No transcript to summarize');
+            return;
+        }
+
+        // Collect all source text
+        const text = rec.transcript
+            .map(t => t.vi || t.source || '')
+            .filter(s => s.trim())
+            .join(' ');
+
+        if (!text.trim()) {
+            this.showNotification('No text to summarize');
+            return;
+        }
+
+        this.showNotification('Generating summary...');
+        if (this.summarizeBtn) this.summarizeBtn.disabled = true;
+
+        try {
+            const resp = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, topic: rec.customName || '' })
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                this.showSummary(data.summary || 'No summary generated.');
+            } else {
+                this.showNotification('Could not generate summary');
+            }
+        } catch (e) {
+            this.showNotification('Summary failed');
+        } finally {
+            if (this.summarizeBtn) this.summarizeBtn.disabled = false;
+        }
+    }
+
+    showSummary(summary) {
+        if (!summary || !this.summaryModal) return;
+
+        let html = summary
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+            .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^- (.+)$/gm, '<li>$1</li>')
+            .replace(/\n/g, '<br>');
+
+        if (this.summaryContent) this.summaryContent.innerHTML = html;
+        this.summaryModal.classList.add('active');
+        this.showNotification('Summary ready!');
+    }
+
+    showNotification(msg) {
+        if (!this.notification) return;
+        this.notification.textContent = msg;
+        this.notification.classList.add('active');
+        setTimeout(() => this.notification.classList.remove('active'), 2500);
     }
 }
 

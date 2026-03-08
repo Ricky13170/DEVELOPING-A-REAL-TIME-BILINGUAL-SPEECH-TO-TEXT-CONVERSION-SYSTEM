@@ -1,5 +1,4 @@
 const SAMPLE_RATE = 16000;
-const BUFFER_SIZE = 4096;
 const SEND_INTERVAL_MS = 250;
 
 function linearResample(buffer, fromRate, toRate) {
@@ -14,7 +13,6 @@ function linearResample(buffer, fromRate, toRate) {
         const srcIndexFloor = Math.floor(srcIndex);
         const srcIndexCeil = Math.min(srcIndexFloor + 1, buffer.length - 1);
         const fraction = srcIndex - srcIndexFloor;
-
         result[i] = buffer[srcIndexFloor] * (1 - fraction) + buffer[srcIndexCeil] * fraction;
     }
 
@@ -60,11 +58,18 @@ class AudioManager {
         this.isRecording = false;
         this.onAudioData = null;
         this.onLevelUpdate = null;
-        this.pendingBuffer = [];
+        this.pendingChunks = [];    // Array of Float32Array chunks (avoids spread)
+        this.pendingLength = 0;     // Total samples across chunks
         this.sendInterval = null;
         this.workletLoaded = false;
         this.selectedDeviceId = null;
         this.availableDevices = [];
+
+        // Screen share state
+        this.screenStream = null;
+        this.isScreenSharing = false;
+        this.onScreenStream = null;     // callback: (stream) => show video
+        this.onScreenStop = null;       // callback: () => hide video
     }
 
     async init() {
@@ -84,14 +89,11 @@ class AudioManager {
 
     async getAvailableMicrophones() {
         try {
-            // Request permission first
             await navigator.mediaDevices.getUserMedia({ audio: true });
-
             const devices = await navigator.mediaDevices.enumerateDevices();
             const mics = devices.filter(d => d.kind === 'audioinput' && d.deviceId);
 
-            // Get top 3 microphones
-            this.availableDevices = mics.slice(0, 3).map((d, i) => ({
+            this.availableDevices = mics.slice(0, 5).map((d, i) => ({
                 deviceId: d.deviceId,
                 label: d.label || `Microphone ${i + 1}`,
                 isDefault: d.deviceId === 'default' || i === 0
@@ -128,7 +130,11 @@ class AudioManager {
         return navigator.mediaDevices.getUserMedia(constraints);
     }
 
-    async getComputerAudioStream() {
+    /**
+     * Start screen sharing — captures both video AND audio.
+     * Returns the full MediaStream (with video tracks for preview).
+     */
+    async startScreenShare() {
         const stream = await navigator.mediaDevices.getDisplayMedia({
             video: true,
             audio: {
@@ -137,13 +143,49 @@ class AudioManager {
                 sampleRate: { ideal: 16000 }
             }
         });
-        stream.getVideoTracks().forEach(t => t.stop());
-        if (stream.getAudioTracks().length === 0) {
-            throw new Error('No audio - enable "Share audio"');
+
+        // Check if audio track exists
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) {
+            // No audio — still show video but warn
+            console.warn('[Audio] Screen share has no audio track. Make sure to check "Share audio".');
         }
+
+        this.screenStream = stream;
+        this.isScreenSharing = true;
+
+        // Listen for the user clicking browser's "Stop sharing" button
+        stream.getVideoTracks().forEach(track => {
+            track.onended = () => {
+                console.log('[Audio] Screen share stopped by user');
+                this.stopScreenShare();
+            };
+        });
+
+        // Notify UI to show video preview
+        if (this.onScreenStream) this.onScreenStream(stream);
+
         return stream;
     }
 
+    /**
+     * Stop screen sharing — cleans up video + audio tracks.
+     */
+    stopScreenShare() {
+        if (this.screenStream) {
+            this.screenStream.getTracks().forEach(t => t.stop());
+            this.screenStream = null;
+        }
+        this.isScreenSharing = false;
+
+        if (this.onScreenStop) this.onScreenStop();
+        console.log('[Audio] Screen share stopped');
+    }
+
+    /**
+     * Start recording from the given source.
+     * @param {'microphone' | 'computer' | 'screen'} source
+     */
     async startRecording(source = 'microphone') {
         await this.init();
 
@@ -152,9 +194,37 @@ class AudioManager {
         }
 
         try {
-            this.mediaStream = source === 'computer'
-                ? await this.getComputerAudioStream()
-                : await this.getMicrophoneStream();
+            if (source === 'screen') {
+                // Screen share: get audio from screen share stream
+                const screenStream = await this.startScreenShare();
+                const audioTracks = screenStream.getAudioTracks();
+
+                if (audioTracks.length > 0) {
+                    // Create an audio-only stream from the screen share
+                    this.mediaStream = new MediaStream(audioTracks);
+                } else {
+                    // Fallback: also get mic audio if no screen audio
+                    console.log('[Audio] No screen audio, falling back to mic');
+                    this.mediaStream = await this.getMicrophoneStream();
+                }
+            } else if (source === 'computer') {
+                // Pure computer audio (getDisplayMedia, no video preview)
+                const displayStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        sampleRate: { ideal: 16000 }
+                    }
+                });
+                displayStream.getVideoTracks().forEach(t => t.stop());
+                if (displayStream.getAudioTracks().length === 0) {
+                    throw new Error('No audio — enable "Share audio"');
+                }
+                this.mediaStream = displayStream;
+            } else {
+                this.mediaStream = await this.getMicrophoneStream();
+            }
         } catch (err) {
             console.error('[Audio] Failed to get stream:', err);
             throw err;
@@ -167,7 +237,6 @@ class AudioManager {
 
             this.workletNode.port.onmessage = (event) => {
                 if (!this.isRecording) return;
-
                 const { command, inputBuffer } = event.data;
                 if (command === 'process') {
                     this.processAudioChunk(inputBuffer);
@@ -181,7 +250,8 @@ class AudioManager {
             return;
         }
 
-        this.pendingBuffer = [];
+        this.pendingChunks = [];
+        this.pendingLength = 0;
         this.sendInterval = setInterval(() => this.flushBuffer(), SEND_INTERVAL_MS);
 
         this.isRecording = true;
@@ -197,14 +267,22 @@ class AudioManager {
         }
 
         const resampled = linearResample(inputData, this.sourceSampleRate, SAMPLE_RATE);
-        this.pendingBuffer.push(...resampled);
+        this.pendingChunks.push(resampled);
+        this.pendingLength += resampled.length;
     }
 
     flushBuffer() {
-        if (!this.isRecording || this.pendingBuffer.length === 0) return;
+        if (!this.isRecording || this.pendingLength === 0) return;
 
-        const float32 = new Float32Array(this.pendingBuffer);
-        this.pendingBuffer = [];
+        // Concatenate chunks into a single Float32Array (zero-copy pattern)
+        const float32 = new Float32Array(this.pendingLength);
+        let offset = 0;
+        for (const chunk of this.pendingChunks) {
+            float32.set(chunk, offset);
+            offset += chunk.length;
+        }
+        this.pendingChunks = [];
+        this.pendingLength = 0;
 
         const int16 = float32ToInt16(float32);
         const base64 = int16ToBase64(int16);
@@ -237,6 +315,11 @@ class AudioManager {
         if (this.mediaStream) {
             this.mediaStream.getTracks().forEach(t => t.stop());
             this.mediaStream = null;
+        }
+
+        // Stop screen share if active
+        if (this.isScreenSharing) {
+            this.stopScreenShare();
         }
 
         console.log('[Audio] Recording stopped');

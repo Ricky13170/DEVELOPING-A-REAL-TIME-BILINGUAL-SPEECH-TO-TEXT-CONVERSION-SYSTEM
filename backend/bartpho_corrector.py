@@ -206,7 +206,7 @@ class BARTphoCorrector:
             base_model = AutoModelForSeq2SeqLM.from_pretrained(
                 BARTPHO_BASE,
                 cache_dir=self.cache_dir,
-                dtype=torch.float16,
+                torch_dtype=torch.float16,
             )
             self.model = PeftModel.from_pretrained(
                 base_model,

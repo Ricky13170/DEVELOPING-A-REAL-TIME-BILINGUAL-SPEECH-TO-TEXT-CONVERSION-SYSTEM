@@ -4,16 +4,18 @@ import asyncio
 import numpy as np
 import time
 import re
+from functools import partial
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from backend.config import (
     SAMPLE_RATE, MAX_SEGMENT_SEC, OVERLAP_SEC, SILENCE_LIMIT,
     MIN_DECODE_SEC, AGREEMENT_N, HALLUCINATION_HISTORY_SIZE,
-    ENABLE_BARTPHO, BARTPHO_ADAPTER, BARTPHO_DEVICE,
     GROQ_API_KEY, AUTO_SUMMARY_MIN_DURATION,
+    WHISPER_MODEL, WHISPER_LANGUAGE, ASR_DEVICE,
+    NLLB_MODEL, NLLB_SRC_LANG, NLLB_TGT_LANG, NLLB_DEVICE,
 )
-from backend.asr import WhisperASR, StreamingASRProcessor
+from backend.asr import WhisperASR
 from backend.translation import NLLBTranslator
-from backend.bartpho_corrector import BARTphoCorrector
 from backend.groq_service import GroqService
 from backend.vad import VADManager
 from backend.speech_segment_buffer import SpeechSegmentBuffer
@@ -25,7 +27,6 @@ class ASRService:
     def __init__(self):
         self.asr = None
         self.translator = None
-        self.corrector = None
         self.groq = None
         self.is_initialized = False
 
@@ -34,33 +35,19 @@ class ASRService:
         
         print("[Model] Loading Whisper...")
         self.asr = WhisperASR(
-            model_size="large-v3",
-            language="vi",
-            device="cuda",
+            model_size=WHISPER_MODEL,
+            language=WHISPER_LANGUAGE,
+            device=ASR_DEVICE,
             cache_dir="/cache/whisper"
         )
         self.asr.load_model()
         
-        # Load BARTpho Corrector
-        if ENABLE_BARTPHO:
-            t0 = time.time()
-            print("[Model] Loading BARTpho Corrector...")
-            self.corrector = BARTphoCorrector(
-                adapter_id=BARTPHO_ADAPTER,
-                device=BARTPHO_DEVICE,
-                cache_dir="/cache/huggingface",
-            )
-            await loop.run_in_executor(None, self.corrector.load_model)
-            print(f"[Model] BARTpho loaded in {time.time() - t0:.1f}s")
-        else:
-            print("[Model] BARTpho disabled (ENABLE_BARTPHO=False)")
-        
         print("[Model] Loading NLLB Translator...")
         self.translator = NLLBTranslator(
-            model_name="facebook/nllb-200-3.3B",
-            src_lang="vie_Latn",
-            tgt_lang="eng_Latn",
-            device="cuda",
+            model_name=NLLB_MODEL,
+            src_lang=NLLB_SRC_LANG,
+            tgt_lang=NLLB_TGT_LANG,
+            device=NLLB_DEVICE,
             cache_dir="/cache/nllb"
         )
         await loop.run_in_executor(None, self.translator.load_model)
@@ -74,6 +61,10 @@ class ASRService:
 
     def create_session(self):
         return ASRSession(self)
+
+
+# Named executor for Whisper inference (allows concurrent intermediate + final decodes)
+_whisper_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="whisper")
 
 
 class ASRSession:
@@ -103,8 +94,11 @@ class ASRSession:
         self.pending_partial_time = None      
         self.PARTIAL_FINALIZE_TIMEOUT = 3.0 
         
-        # Language config
+        # Language config (per-session, overrideable by client)
         self.do_translate = True
+        self.src_lang_whisper = WHISPER_LANGUAGE   # Whisper language code (e.g. 'vi', 'en')
+        self.tgt_lang_nllb = NLLB_TGT_LANG         # NLLB target code (e.g. 'eng_Latn')
+        self.src_lang_nllb = NLLB_SRC_LANG         # NLLB source code (e.g. 'vie_Latn')
         
         # Context priming (Groq)
         self.topic = ""
@@ -113,7 +107,17 @@ class ASRSession:
         
         self.transcript_history = [] 
         
+        # Background task tracking (prevents fire-and-forget leaks)
+        self.bg_tasks = set()
+        
         print("[Session] Initialized with segment-based architecture")
+
+    def _create_tracked_task(self, coro):
+        """Create and track an asyncio task"""
+        task = asyncio.create_task(coro)
+        self.bg_tasks.add(task)
+        task.add_done_callback(self.bg_tasks.discard)
+        return task
 
     async def handle_incoming(self, message: str):
         """Route incoming WebSocket messages"""
@@ -127,6 +131,10 @@ class ASRSession:
                 await self._handle_audio(data)
             elif msg_type == "stop":
                 await self._handle_stop()
+            elif msg_type == "context":
+                await self._handle_context(data)
+            elif msg_type == "lang_change":
+                await self._handle_lang_change(data)
             elif msg_type == "summarize":
                 await self._handle_summarize()
             elif msg_type == "ping":
@@ -135,6 +143,44 @@ class ASRSession:
         except Exception as e:
             print(f"[Handler] Error: {e}")
 
+    async def _handle_context(self, data):
+        """Update context mid-session without restart"""
+        topic = self._sanitize_topic(data.get("topic", ""))
+        keywords = data.get("keywords", "")
+        context = data.get("context", "")
+
+        if topic:
+            self.topic = topic
+
+        # Handle keywords: can be string or list
+        if isinstance(keywords, list):
+            keywords = ", ".join(keywords)
+
+        parts = []
+        if keywords:
+            parts.append(keywords)
+        if context:
+            parts.append(context)
+        if self.topic and not parts:
+            # Expand topic to keywords + context if no explicit ones given
+            try:
+                result = await self.service.groq.generate_context(self.topic)
+                if result.get("keywords"):
+                    parts.append(result["keywords"])
+                if result.get("context"):
+                    parts.append(result["context"])
+            except Exception:
+                pass
+
+        if parts:
+            self.initial_prompt = ", ".join(parts)
+            print(f"[Context] Updated mid-session: {self.initial_prompt[:80]}")
+
+        await self.out_queue.put(json.dumps({
+            "type": "log", "level": "info",
+            "message": "Context updated"
+        }))
+
     @staticmethod
     def _sanitize_topic(topic: str) -> str:
         """Sanitize user-provided topic input"""
@@ -142,6 +188,30 @@ class ASRSession:
             return ""
         topic = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', topic)
         return topic.strip()[:200]
+
+    async def _handle_lang_change(self, data):
+        """Handle mid-session language change from client"""
+        src_whisper = data.get("srcLang")
+        tgt_nllb = data.get("tgtNllb")
+        src_nllb = data.get("srcNllb")
+        
+        changed = False
+        if src_whisper is not None and src_whisper != self.src_lang_whisper:
+            self.src_lang_whisper = src_whisper if src_whisper != 'auto' else None
+            changed = True
+        if src_nllb and src_nllb != self.src_lang_nllb:
+            self.src_lang_nllb = src_nllb
+            changed = True
+        if tgt_nllb and tgt_nllb != self.tgt_lang_nllb:
+            self.tgt_lang_nllb = tgt_nllb
+            changed = True
+        
+        if changed:
+            print(f"[Session] Language changed: {self.src_lang_whisper or 'auto'} → {self.tgt_lang_nllb} | translate={self.do_translate}")
+            await self.out_queue.put(json.dumps({
+                "type": "log", "level": "info",
+                "message": f"Language switched: {self.src_lang_whisper or 'auto'} → {self.tgt_lang_nllb}"
+            }))
 
     async def _handle_start(self, data):
         """Start recording session"""
@@ -155,12 +225,33 @@ class ASRSession:
         self.all_transcripts = []
         self.initial_prompt = ""
         
+        # === Apply client language selection ===
+        src_whisper = data.get("srcLang")  # e.g. 'vi', 'en', None (auto)
+        tgt_code = data.get("tgtLang")    # e.g. 'en', 'vi', 'zh'
+        tgt_nllb = data.get("tgtNllb")    # e.g. 'eng_Latn' (direct NLLB code)
+        src_nllb = data.get("srcNllb")    # e.g. 'vie_Latn'
+        do_translate = data.get("translate", True)
+        
+        if src_whisper is not None:
+            self.src_lang_whisper = src_whisper if src_whisper != 'auto' else None
+        if tgt_nllb:
+            self.tgt_lang_nllb = tgt_nllb
+        if src_nllb:
+            self.src_lang_nllb = src_nllb
+        self.do_translate = do_translate
+        
+        print(f"[Session] Language: {self.src_lang_whisper or 'auto'} → {self.tgt_lang_nllb} | translate={self.do_translate}")
+        
         # Reset all components
         self.vad.reset()
         self.segmenter.reset()
         self.agreement.reset()
         self.hallucination_filter.reset()
         self.transcript_history = []  
+        # Cancel previous background tasks
+        for task in list(self.bg_tasks):
+            task.cancel()
+        self.bg_tasks.clear()
         
         # === Context Priming ===
         base_prompt = (
@@ -175,18 +266,20 @@ class ASRSession:
             try:
                 await self.out_queue.put(json.dumps({
                     "type": "log", "level": "info",
-                    "message": "Generating keywords from topic..."
+                    "message": "Generating keywords & context from topic..."
                 }))
-                keywords = await self.service.groq.expand_keywords(
-                    self.topic, language="vi"
+                result = await self.service.groq.generate_context(
+                    self.topic, language=self.src_lang_whisper or "vi"
                 )
-                if keywords:
-                    self.initial_prompt = base_prompt + ", " + keywords
-                    print(f"[Context] Primed with: {self.initial_prompt[:80]}...")
-                else:
-                    self.initial_prompt = base_prompt
+                context_parts = [base_prompt]
+                if result.get("keywords"):
+                    context_parts.append(result["keywords"])
+                if result.get("context"):
+                    context_parts.append(result["context"])
+                self.initial_prompt = ", ".join(context_parts)
+                print(f"[Context] Primed with: {self.initial_prompt[:80]}...")
             except Exception as e:
-                print(f"[Context] Keyword expansion failed: {e}")
+                print(f"[Context] Context generation failed: {e}")
                 self.initial_prompt = base_prompt
         else:
             self.initial_prompt = base_prompt
@@ -245,7 +338,7 @@ class ASRSession:
                 current_audio = self.segmenter.get_current_audio()
                 
                 if len(current_audio) > 16000:
-                    asyncio.create_task(
+                    self._create_tracked_task(
                         self._decode_intermediate(current_audio)
                     )
             
@@ -273,10 +366,10 @@ class ASRSession:
         prompt = self._build_prompt()
         
         text, conf = await loop.run_in_executor(
-            None,
-            self.service.asr.transcribe,
-            audio,
-            prompt 
+            _whisper_executor,
+            partial(self.service.asr.transcribe,
+                    audio, prompt,
+                    language=self.src_lang_whisper)
         )
         
         inference_ms = int((time.time() - start) * 1000)
@@ -306,22 +399,14 @@ class ASRSession:
             self.last_stable = stable_text
             self.agreement.reset()
             
-            # BARTpho syllable correction (FINAL segments only)
-            pp_time = 0.0
-            if (self.service.corrector
-                and self.service.corrector.is_loaded):
-                loop = asyncio.get_event_loop()
-                pp_start = time.time()
-                corrected = await loop.run_in_executor(
-                    None, self.service.corrector.correct, stable_text
-                )
-                pp_time = time.time() - pp_start
-                if corrected and corrected != stable_text:
-                    print(f"[PP] \"{stable_text[:40]}\" → \"{corrected[:40]}\" ({pp_time:.2f}s)")
-                    stable_text = corrected
-            
             # Collect transcript for summary
             self.all_transcripts.append(stable_text)
+            
+            # Cap array size to prevent memory/context overflow for very long sessions
+            total_chars = sum(len(t) for t in self.all_transcripts)
+            while total_chars > 20000 and len(self.all_transcripts) > 1:
+                removed = self.all_transcripts.pop(0)
+                total_chars -= len(removed)
             
             self.transcript_history.append(stable_text)
             if len(self.transcript_history) > 3:
@@ -329,7 +414,6 @@ class ASRSession:
         else:
             # PARTIAL: Apply local agreement
             stable_text, unstable_text = self.agreement.process(text)
-            pp_time = 0.0
             
             self.pending_partial_text = f"{stable_text} {unstable_text}".strip()
             self.pending_partial_time = time.time()
@@ -347,19 +431,23 @@ class ASRSession:
             "timestamp": self._get_timestamp()
         }))
         
-        if is_final and self.do_translate and stable_text:
-            asyncio.create_task(self._translate(stable_text, self.segment_id))
+        if is_final and stable_text:
+            # Run translation
+            if self.do_translate:
+                self._create_tracked_task(self._translate(stable_text, self.segment_id))
 
     async def _translate(self, text: str, seg_id: int):
-        """Translate Vietnamese to English"""
+        """Translate using session language pair"""
         loop = asyncio.get_event_loop()
         
         try:
             start = time.time()
             translated = await loop.run_in_executor(
                 None,
-                self.service.translator.translate,
-                text
+                partial(self.service.translator.translate,
+                        text,
+                        src_lang=self.src_lang_nllb,
+                        tgt_lang=self.tgt_lang_nllb)
             )
             duration = time.time() - start
             
@@ -398,7 +486,7 @@ class ASRSession:
                 "type": "log", "level": "info",
                 "message": "Generating lecture summary..."
             }))
-            asyncio.create_task(self._generate_summary())
+            self._create_tracked_task(self._generate_summary())
 
     async def _handle_summarize(self):
         """Handle manual summarize request from client"""
@@ -449,12 +537,13 @@ class ASRSession:
         print(f"⏰ Auto-finalize pending partial: {self.pending_partial_text[:50]}...")
     
         self.segment_id += 1
-        self.last_stable = self.pending_partial_text
+        stable_text = self.pending_partial_text
+        self.last_stable = stable_text
     
         await self.out_queue.put(json.dumps({
             "type": "transcript",
             "segment_id": self.segment_id,
-            "source": self.pending_partial_text,
+            "source": stable_text,
             "target": "",
             "is_final": True,  
             "confidence": 0.8,
@@ -463,7 +552,7 @@ class ASRSession:
     
         # Trigger translation
         if self.do_translate:
-            asyncio.create_task(self._translate(self.pending_partial_text, self.segment_id))
+            self._create_tracked_task(self._translate(stable_text, self.segment_id))
     
         # Clear pending
         self.pending_partial_text = None
@@ -510,10 +599,10 @@ class ASRSession:
         try:
             prompt = self._build_prompt()
             text, conf = await loop.run_in_executor(
-                None,
-                self.service.asr.transcribe,
-                audio,
-                prompt
+                _whisper_executor,
+                partial(self.service.asr.transcribe,
+                        audio, prompt,
+                        language=self.src_lang_whisper)
             )
             
             if text and len(text) > 10: 

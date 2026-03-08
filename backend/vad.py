@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import logging
 from backend.config import SAMPLE_RATE
+import backend.torch_patch  # noqa: F401 — must be imported before pyannote to suppress torchcodec warning
 logger = logging.getLogger(__name__)
 
 class VADManager:
