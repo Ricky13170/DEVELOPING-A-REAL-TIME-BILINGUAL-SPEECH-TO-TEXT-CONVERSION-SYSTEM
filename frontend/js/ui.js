@@ -1,4 +1,4 @@
-import { getLanguage, getSourceLanguages, getTargetLanguages, saveLanguagePreference, loadLanguagePreference } from './languages.js';
+import { getLanguage, getTargetLanguages, saveLanguagePreference, loadLanguagePreference } from './languages.js';
 
 class UIManager {
     constructor() {
@@ -34,19 +34,24 @@ class UIManager {
             screenPreview: document.getElementById('screenPreview'),
             screenVideoWrap: document.getElementById('screenVideoWrap'),
             stopScreenBtn: document.getElementById('stopScreenBtn'),
+            screenLayoutBtn: document.getElementById('screenLayoutBtn'),
             // Language selectors
-            srcLangBtn: document.getElementById('srcLangBtn'),
-            srcLangFlag: document.getElementById('srcLangFlag'),
-            srcLangName: document.getElementById('srcLangName'),
-            srcLangMenu: document.getElementById('srcLangMenu'),
-            srcLangDropdown: document.getElementById('srcLangDropdown'),
             tgtLangBtn: document.getElementById('tgtLangBtn'),
             tgtLangFlag: document.getElementById('tgtLangFlag'),
             tgtLangName: document.getElementById('tgtLangName'),
             tgtLangMenu: document.getElementById('tgtLangMenu'),
             tgtLangDropdown: document.getElementById('tgtLangDropdown'),
-            swapLangBtn: document.getElementById('swapLangBtn'),
             displayModeBtn: document.getElementById('displayModeBtn'),
+            // Demo & settings
+
+            settingsBtn: document.getElementById('settingsBtn'),
+            loginBtn: document.getElementById('loginBtn'),
+            settingsModal: document.getElementById('settingsModal'),
+            settingsClose: document.getElementById('settingsClose'),
+            settingsSave: document.getElementById('settingsSave'),
+            loginModal: document.getElementById('loginModal'),
+            loginClose: document.getElementById('loginClose'),
+            templateChips: document.getElementById('templateChips'),
         };
 
         this.timerInterval = null;
@@ -58,147 +63,79 @@ class UIManager {
         this.onScreenShareToggle = null;
         this.onLangChange = null;
         this.displayedSegments = new Map();
+        this.segmentDataCache = new Map(); // segment_id → {segment_id, source, target, is_final}
 
         // Display mode: 'mixed' (original + translation together) or 'split' (side by side)
         this.displayMode = localStorage.getItem('asr_displayMode') || 'mixed';
 
-        // Language state
-        const pref = loadLanguagePreference();
-        this.srcLang = pref.srcCode;
-        this.tgtLang = pref.tgtCode;
+        // Language state — source is always 'auto'
+        this.srcLang = 'auto';
+        this.tgtLang = loadLanguagePreference().tgtCode;
 
         this.setupEventHandlers();
         this.initLanguageSelectors();
+
+        // Show sidebar on start (desktop)
+        if (window.innerWidth > 1024 && this.el.sidebar) {
+            this.el.sidebar.classList.add('active');
+        }
     }
 
     /* ═══════════ LANGUAGE SELECTORS ═══════════ */
 
     initLanguageSelectors() {
-        this._updateLangButton('src');
-        this._updateLangButton('tgt');
-        this._populateLangMenu('src');
+        this._updateLangButton();
         this._populateLangMenu('tgt');
-
-        // Source language button
-        if (this.el.srcLangBtn) {
-            this.el.srcLangBtn.onclick = (e) => {
-                e.stopPropagation();
-                this._toggleLangMenu('src');
-            };
-        }
 
         // Target language button
         if (this.el.tgtLangBtn) {
             this.el.tgtLangBtn.onclick = (e) => {
                 e.stopPropagation();
-                this._toggleLangMenu('tgt');
-            };
-        }
-
-        // Swap button
-        if (this.el.swapLangBtn) {
-            this.el.swapLangBtn.onclick = () => {
-                // Don't swap if source is 'auto'
-                if (this.srcLang === 'auto') {
-                    this.showNotification('Cannot swap when source is Auto Detect');
-                    return;
-                }
-                const tmp = this.srcLang;
-                this.srcLang = this.tgtLang;
-                this.tgtLang = tmp;
-                this._updateLangButton('src');
-                this._updateLangButton('tgt');
-                this._populateLangMenu('src');
-                this._populateLangMenu('tgt');
-                saveLanguagePreference(this.srcLang, this.tgtLang);
-
-                // Notify app of language change
-                if (this.onLangChange) {
-                    this.onLangChange(this.getSelectedLanguages());
-                }
+                this.el.tgtLangDropdown?.classList.toggle('active');
+                this.el.tgtLangMenu?.classList.toggle('active');
             };
         }
 
         // Close menus on outside click
         document.addEventListener('click', () => {
-            this.el.srcLangDropdown?.classList.remove('active');
-            this.el.srcLangMenu?.classList.remove('active');
             this.el.tgtLangDropdown?.classList.remove('active');
             this.el.tgtLangMenu?.classList.remove('active');
         });
     }
 
-    _toggleLangMenu(type) {
-        const dropdown = type === 'src' ? this.el.srcLangDropdown : this.el.tgtLangDropdown;
-        const menu = type === 'src' ? this.el.srcLangMenu : this.el.tgtLangMenu;
-        const otherDropdown = type === 'src' ? this.el.tgtLangDropdown : this.el.srcLangDropdown;
-        const otherMenu = type === 'src' ? this.el.tgtLangMenu : this.el.srcLangMenu;
-
-        // Close other
-        otherDropdown?.classList.remove('active');
-        otherMenu?.classList.remove('active');
-
-        // Toggle this
-        dropdown?.classList.toggle('active');
-        menu?.classList.toggle('active');
-    }
-
-    _updateLangButton(type) {
-        const code = type === 'src' ? this.srcLang : this.tgtLang;
-        const lang = getLanguage(code);
+    _updateLangButton() {
+        const lang = getLanguage(this.tgtLang);
         if (!lang) return;
-
-        if (type === 'src') {
-            if (this.el.srcLangFlag) this.el.srcLangFlag.textContent = lang.flag;
-            if (this.el.srcLangName) this.el.srcLangName.textContent = lang.name;
-        } else {
-            if (this.el.tgtLangFlag) this.el.tgtLangFlag.textContent = lang.flag;
-            if (this.el.tgtLangName) this.el.tgtLangName.textContent = lang.name;
-        }
+        if (this.el.tgtLangFlag) this.el.tgtLangFlag.textContent = lang.flag;
+        if (this.el.tgtLangName) this.el.tgtLangName.textContent = lang.name;
     }
 
-    _populateLangMenu(type) {
-        const menu = type === 'src' ? this.el.srcLangMenu : this.el.tgtLangMenu;
+    _populateLangMenu() {
+        const menu = this.el.tgtLangMenu;
         if (!menu) return;
 
-        const langs = type === 'src' ? getSourceLanguages() : getTargetLanguages(this.srcLang);
-        const currentCode = type === 'src' ? this.srcLang : this.tgtLang;
+        const langs = getTargetLanguages(this.srcLang);
 
         menu.innerHTML = langs.map(lang => `
-            <div class="dropdown-item ${lang.code === currentCode ? 'active' : ''}" data-code="${lang.code}">
+            <div class="dropdown-item ${lang.code === this.tgtLang ? 'active' : ''}" data-code="${lang.code}">
                 <span class="item-flag">${lang.flag}</span>
                 <span class="item-name">${lang.name}</span>
-                <span class="item-native">${lang.nameNative}</span>
             </div>
         `).join('');
 
         menu.querySelectorAll('.dropdown-item').forEach(item => {
             item.onclick = (e) => {
                 e.stopPropagation();
-                const code = item.dataset.code;
-                if (type === 'src') {
-                    this.srcLang = code;
-                    // If source === target, change target
-                    if (this.srcLang === this.tgtLang && this.srcLang !== 'auto') {
-                        this.tgtLang = this.srcLang === 'en' ? 'vi' : 'en';
-                        this._updateLangButton('tgt');
-                        this._populateLangMenu('tgt');
-                    }
-                } else {
-                    this.tgtLang = code;
-                }
-                this._updateLangButton(type);
-                this._populateLangMenu(type);
+                this.tgtLang = item.dataset.code;
+                this._updateLangButton();
+                this._populateLangMenu();
                 saveLanguagePreference(this.srcLang, this.tgtLang);
 
-                // Notify app of language change (for mid-session switching)
                 if (this.onLangChange) {
                     this.onLangChange(this.getSelectedLanguages());
                 }
 
-                // Close menu
-                const dropdown = type === 'src' ? this.el.srcLangDropdown : this.el.tgtLangDropdown;
-                dropdown?.classList.remove('active');
+                this.el.tgtLangDropdown?.classList.remove('active');
                 menu.classList.remove('active');
             };
         });
@@ -305,8 +242,65 @@ class UIManager {
             };
         }
 
+        // Picture-in-Picture
+        const pipBtn = document.getElementById('pipBtn');
+        if (pipBtn) {
+            pipBtn.onclick = () => this.togglePiP();
+        }
+
+        // Screen layout toggle
+        if (this.el.screenLayoutBtn) {
+            this.el.screenLayoutBtn.onclick = () => this.toggleScreenLayout();
+        }
+
         this.loadRecordingsSidebar();
         this.setupPanelResizer();
+
+        // Template chips
+        if (this.el.templateChips) {
+            this.el.templateChips.onclick = (e) => {
+                const chip = e.target.closest('[data-template]');
+                if (chip) this.applyTemplate(chip.dataset.template);
+            };
+        }
+
+        // Settings modal
+        if (this.el.settingsBtn) {
+            this.el.settingsBtn.onclick = () => this.el.settingsModal?.classList.add('active');
+        }
+        if (this.el.settingsClose) {
+            this.el.settingsClose.onclick = () => this.el.settingsModal?.classList.remove('active');
+        }
+        if (this.el.settingsSave) {
+            this.el.settingsSave.onclick = () => {
+                this.saveSettings();
+                this.el.settingsModal?.classList.remove('active');
+                this.showNotification('Settings saved');
+            };
+        }
+
+        // Login modal
+        if (this.el.loginBtn) {
+            this.el.loginBtn.onclick = () => this.el.loginModal?.classList.add('active');
+        }
+        if (this.el.loginClose) {
+            this.el.loginClose.onclick = () => this.el.loginModal?.classList.remove('active');
+        }
+        const googleBtn = document.getElementById('googleSignIn');
+        if (googleBtn) {
+            googleBtn.onclick = () => this.showNotification('Google login coming soon');
+        }
+
+        // Close new modals on overlay click
+        [this.el.settingsModal, this.el.loginModal].forEach(modal => {
+            if (modal) {
+                modal.onclick = (e) => {
+                    if (e.target === modal) modal.classList.remove('active');
+                };
+            }
+        });
+
+        this.loadSettings();
     }
 
     /* ═══════════ PANEL RESIZER ═══════════ */
@@ -317,15 +311,19 @@ class UIManager {
         if (!resizer || !screenPanel) return;
 
         let isResizing = false;
-        let startX = 0;
-        let startWidth = 0;
+        let startPos = 0;
+        let startSize = 0;
+
+        const isVertical = () => this._screenLayout === 'vertical';
 
         const onStart = (e) => {
             if (screenPanel.classList.contains('hidden')) return;
             isResizing = true;
-            startX = e.clientX || e.touches?.[0]?.clientX || 0;
-            startWidth = screenPanel.offsetWidth;
-            document.body.style.cursor = 'col-resize';
+            const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
+            const clientY = e.clientY || e.touches?.[0]?.clientY || 0;
+            startPos = isVertical() ? clientX : clientY;
+            startSize = isVertical() ? screenPanel.offsetWidth : screenPanel.offsetHeight;
+            document.body.style.cursor = isVertical() ? 'col-resize' : 'row-resize';
             document.body.style.userSelect = 'none';
             e.preventDefault();
         };
@@ -333,12 +331,25 @@ class UIManager {
         const onMove = (e) => {
             if (!isResizing) return;
             const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
-            const dx = clientX - startX;
+            const clientY = e.clientY || e.touches?.[0]?.clientY || 0;
             const container = document.querySelector('.content');
-            const containerWidth = container?.offsetWidth || 0;
-            const newWidth = Math.max(200, Math.min(containerWidth * 0.8, startWidth + dx));
-            screenPanel.style.flex = 'none';
-            screenPanel.style.width = `${newWidth}px`;
+            if (!container) return;
+
+            if (isVertical()) {
+                const dx = clientX - startPos;
+                const maxW = container.offsetWidth * 0.8;
+                const newWidth = Math.max(200, Math.min(maxW, startSize + dx));
+                screenPanel.style.flex = 'none';
+                screenPanel.style.width = `${newWidth}px`;
+                screenPanel.style.height = '';
+            } else {
+                const dy = clientY - startPos;
+                const maxH = container.offsetHeight * 0.8;
+                const newHeight = Math.max(120, Math.min(maxH, startSize + dy));
+                screenPanel.style.flex = 'none';
+                screenPanel.style.height = `${newHeight}px`;
+                screenPanel.style.width = '';
+            }
         };
 
         const onEnd = () => {
@@ -362,11 +373,27 @@ class UIManager {
         if (this.el.screenPanel) {
             this.el.screenPanel.classList.remove('hidden');
         }
+        // Apply saved layout preference (horizontal or vertical)
+        const content = document.querySelector('.content');
+        this._screenLayout = localStorage.getItem('asr_screenLayout') || 'horizontal';
+        if (content) {
+            content.classList.add('screen-' + this._screenLayout);
+        }
+        this._updateScreenLayoutIcon();
+
         if (this.el.screenPreview && stream) {
             this.el.screenPreview.srcObject = stream;
         }
         if (this.el.screenShareBtn) {
             this.el.screenShareBtn.classList.add('active');
+        }
+        // Auto-switch to split mode for 2-column transcript
+        this._preScreenDisplayMode = this.displayMode;
+        if (this.displayMode !== 'split') {
+            this.displayMode = 'split';
+            localStorage.setItem('asr_displayMode', this.displayMode);
+            this._updateDisplayModeBtn();
+            this._clearDisplayedSegments();
         }
     }
 
@@ -376,25 +403,91 @@ class UIManager {
             this.el.screenPanel.style.width = '';
             this.el.screenPanel.style.flex = '';
         }
+        const content = document.querySelector('.content');
+        if (content) {
+            content.classList.remove('screen-horizontal', 'screen-vertical');
+        }
+
         if (this.el.screenPreview) {
+            // Exit PiP if active
+            if (document.pictureInPictureElement === this.el.screenPreview) {
+                document.exitPictureInPicture().catch(() => {});
+            }
             this.el.screenPreview.srcObject = null;
         }
         if (this.el.screenShareBtn) {
             this.el.screenShareBtn.classList.remove('active');
         }
+        // Restore previous display mode
+        if (this._preScreenDisplayMode && this._preScreenDisplayMode !== this.displayMode) {
+            this.displayMode = this._preScreenDisplayMode;
+            localStorage.setItem('asr_displayMode', this.displayMode);
+            this._updateDisplayModeBtn();
+            this._clearDisplayedSegments();
+        }
+        this._preScreenDisplayMode = null;
+    }
+
+    togglePiP() {
+        const video = this.el.screenPreview;
+        if (!video) return;
+        if (document.pictureInPictureElement === video) {
+            document.exitPictureInPicture().catch(() => {});
+        } else {
+            video.requestPictureInPicture().catch((err) => {
+                this.showNotification('PiP not supported');
+            });
+        }
+    }
+
+    toggleScreenLayout() {
+        const content = document.querySelector('.content');
+        if (!content) return;
+        const current = this._screenLayout || 'horizontal';
+        const next = current === 'horizontal' ? 'vertical' : 'horizontal';
+        content.classList.remove('screen-' + current);
+        content.classList.add('screen-' + next);
+        this._screenLayout = next;
+        localStorage.setItem('asr_screenLayout', next);
+        this._updateScreenLayoutIcon();
+        // Reset inline size when switching layout
+        if (this.el.screenPanel) {
+            this.el.screenPanel.style.width = '';
+            this.el.screenPanel.style.height = '';
+            this.el.screenPanel.style.flex = '';
+        }
+    }
+
+    _updateScreenLayoutIcon() {
+        const btn = this.el.screenLayoutBtn;
+        if (!btn) return;
+        const isVertical = this._screenLayout === 'vertical';
+        // Vertical split icon (line down middle) vs horizontal split icon (line across middle)
+        btn.innerHTML = isVertical
+            ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="12" x2="22" y2="12"/></svg>'
+            : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>';
+        btn.title = isVertical ? 'Switch to horizontal layout' : 'Switch to vertical layout';
     }
 
     /* ═══════════ AUDIO SOURCE ═══════════ */
 
     setAudioSource(source) {
         this.currentSource = source;
+        // Show/hide screen share button based on source
+        if (this.el.screenShareBtn) {
+            if (source === 'computer' || source === 'screen') {
+                this.el.screenShareBtn.classList.remove('hidden');
+            } else {
+                this.el.screenShareBtn.classList.add('hidden');
+            }
+        }
         if (this.el.audioSourceText) {
             if (source === 'computer') {
-                this.el.audioSourceText.textContent = 'System';
+                this.el.audioSourceText.textContent = 'System Audio';
             } else if (source === 'screen') {
                 this.el.audioSourceText.textContent = 'Screen';
             } else {
-                this.el.audioSourceText.textContent = 'Mic';
+                this.el.audioSourceText.textContent = 'Microphone';
             }
         }
     }
@@ -473,8 +566,8 @@ class UIManager {
     _updateDisplayModeBtn() {
         if (!this.el.displayModeBtn) return;
         if (this.displayMode === 'split') {
-            // Columns icon
-            this.el.displayModeBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>`;
+            // Horizontal split icon (top/bottom)
+            this.el.displayModeBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="18" height="7" rx="1"/></svg>`;
             this.el.displayModeBtn.title = 'Mode: Split (click for Mixed)';
             this.el.displayModeBtn.classList.add('active');
         } else {
@@ -488,6 +581,10 @@ class UIManager {
     /* ═══════════ TRANSCRIPTS ═══════════ */
 
     addTranscriptSegment(data) {
+        // Cache the segment data for mode switching
+        const id = data.segment_id || 0;
+        this.segmentDataCache.set(id, { ...data });
+
         if (this.displayMode === 'split') {
             this._addTranscriptSplit(data);
         } else {
@@ -551,40 +648,68 @@ class UIManager {
         const emptyState = this.el.panelContent.querySelector('.empty-state');
         if (emptyState) emptyState.remove();
 
-        let row = document.getElementById(`split-${id}`);
-
-        if (!row) {
-            row = document.createElement('div');
-            row.id = `split-${id}`;
-            row.className = 'split-row';
-            row.innerHTML = `<div class="split-source"></div><div class="split-target"></div>`;
-            this.el.panelContent.appendChild(row);
+        // Ensure split container exists (top=source, bottom=target)
+        let splitContainer = this.el.panelContent.querySelector('.split-container');
+        if (!splitContainer) {
+            splitContainer = document.createElement('div');
+            splitContainer.className = 'split-container';
+            splitContainer.innerHTML = `
+                <div class="split-pane split-pane-source" id="splitSource">
+                    <div class="split-pane-label">Source</div>
+                    <div class="split-pane-body"></div>
+                </div>
+                <div class="split-divider"></div>
+                <div class="split-pane split-pane-target" id="splitTarget">
+                    <div class="split-pane-label">Translation</div>
+                    <div class="split-pane-body"></div>
+                </div>
+            `;
+            this.el.panelContent.appendChild(splitContainer);
         }
 
-        const srcEl = row.querySelector('.split-source');
-        const tgtEl = row.querySelector('.split-target');
+        const srcBody = splitContainer.querySelector('.split-pane-source .split-pane-body');
+        const tgtBody = splitContainer.querySelector('.split-pane-target .split-pane-body');
 
-        if (source && srcEl) {
+        // Source text — append or update span
+        if (source && srcBody) {
+            let span = srcBody.querySelector(`[data-seg="${id}"]`);
+            if (!span) {
+                span = document.createElement('span');
+                span.dataset.seg = id;
+                span.className = 'split-seg';
+                // Add separator if not first
+                if (srcBody.children.length > 0) {
+                    srcBody.appendChild(document.createTextNode(' '));
+                }
+                srcBody.appendChild(span);
+            }
             if (is_final) {
-                srcEl.innerHTML = source;
+                span.textContent = source;
+                span.classList.remove('partial');
             } else {
-                srcEl.innerHTML = `<span style="opacity: 0.6; font-style: italic;">${source}</span>`;
+                span.textContent = source;
+                span.classList.add('partial');
             }
         }
 
-        if (target && tgtEl) {
-            tgtEl.textContent = target;
+        // Target text — append or update span
+        if (target && tgtBody) {
+            let span = tgtBody.querySelector(`[data-seg="${id}"]`);
+            if (!span) {
+                span = document.createElement('span');
+                span.dataset.seg = id;
+                span.className = 'split-seg';
+                if (tgtBody.children.length > 0) {
+                    tgtBody.appendChild(document.createTextNode(' '));
+                }
+                tgtBody.appendChild(span);
+            }
+            span.textContent = target;
         }
 
-        if (is_final) {
-            row.classList.remove('partial');
-            row.classList.add('final');
-        } else {
-            row.classList.add('partial');
-            row.classList.remove('final');
-        }
-
-        this.el.panelContent.scrollTop = this.el.panelContent.scrollHeight;
+        // Auto scroll both panes
+        srcBody.scrollTop = srcBody.scrollHeight;
+        tgtBody.scrollTop = tgtBody.scrollHeight;
     }
 
     clearTranscripts() {
@@ -592,13 +717,27 @@ class UIManager {
             this.el.panelContent.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div><p>Click record to start</p></div>';
         }
         this.displayedSegments.clear();
+        this.segmentDataCache.clear();
         this.closeClearModal();
     }
 
     _clearDisplayedSegments() {
         if (!this.el.panelContent) return;
-        this.el.panelContent.querySelectorAll('.transcript-segment, .split-row').forEach(el => el.remove());
-        this.displayedSegments.clear();
+        // Smooth fade transition, then re-render cached data in new mode
+        this.el.panelContent.classList.add('switching');
+        setTimeout(() => {
+            this.el.panelContent.querySelectorAll('.transcript-segment, .split-row, .split-container').forEach(el => el.remove());
+            this.displayedSegments.clear();
+            // Re-render all cached segments in the new display mode
+            for (const [, data] of this.segmentDataCache) {
+                if (this.displayMode === 'split') {
+                    this._addTranscriptSplit(data);
+                } else {
+                    this._addTranscriptMixed(data);
+                }
+            }
+            this.el.panelContent.classList.remove('switching');
+        }, 200);
     }
 
     /* ═══════════ NOTIFICATIONS ═══════════ */
@@ -691,6 +830,240 @@ class UIManager {
         }
     }
 
+    /* ═══════════ CONTEXT TEMPLATES ═══════════ */
+
+    applyTemplate(name) {
+        const TEMPLATES = {
+            meeting: {
+                topic: 'Business Meeting',
+                keywords: 'agenda, minutes, action items, deadline, project, budget, stakeholders, KPI',
+                context: 'This script is about a business meeting. You should use terms like agenda, minutes, action items, deadline, project update, and stakeholder.',
+            },
+            lecture: {
+                topic: 'Academic Lecture',
+                keywords: 'theory, concept, methodology, research, hypothesis, analysis, conclusion',
+                context: 'This script is about an academic lecture. You should use terms like theory, methodology, hypothesis, research findings, and analysis.',
+            },
+            interview: {
+                topic: 'Job Interview',
+                keywords: 'experience, qualifications, skills, role, team, compensation, culture',
+                context: 'This script is about a job interview. You should use terms like experience, qualifications, skills, role responsibilities, and compensation.',
+            },
+            medical: {
+                topic: 'Medical Consultation',
+                keywords: 'symptoms, diagnosis, treatment, medication, prescription, follow-up, patient',
+                context: 'This script is about a medical consultation. You should use terms like symptoms, diagnosis, treatment, medication, and prescription.',
+            },
+            tech: {
+                topic: 'Technical Presentation',
+                keywords: 'API, database, architecture, framework, deployment, scalability, performance',
+                context: 'This script is about a technical presentation. You should use terms like API, database, architecture, framework, deployment, and scalability.',
+            },
+            legal: {
+                topic: 'Legal Discussion',
+                keywords: 'contract, clause, compliance, regulation, liability, amendment, jurisdiction',
+                context: 'This script is about a legal discussion. You should use terms like contract, clause, compliance, regulation, liability, and jurisdiction.',
+            },
+        };
+        const tpl = TEMPLATES[name];
+        if (!tpl) return;
+        if (this.el.lectureTopic) this.el.lectureTopic.value = tpl.topic;
+        if (this.el.keywords) this.el.keywords.value = tpl.keywords;
+        if (this.el.context) this.el.context.value = tpl.context;
+        this.showNotification(`Template: ${tpl.topic}`);
+    }
+
+    /* ═══════════ SETTINGS ═══════════ */
+
+    loadSettings() {
+        try {
+            const saved = JSON.parse(localStorage.getItem('asr_settings') || '{}');
+            const interfaceLangEl = document.getElementById('settingInterfaceLang');
+            if (interfaceLangEl && saved.interfaceLang) interfaceLangEl.value = saved.interfaceLang;
+            // Apply theme
+            this._applyTheme(saved.theme || 'light');
+            this._updateThemeSwitcher(saved.theme || 'light');
+            // Apply interface language
+            this._applyInterfaceLang(saved.interfaceLang || 'en');
+        } catch (e) {}
+
+        // Theme switcher
+        const switcher = document.getElementById('themeSwitcher');
+        if (switcher) {
+            switcher.onclick = (e) => {
+                const opt = e.target.closest('[data-theme]');
+                if (!opt) return;
+                const theme = opt.dataset.theme;
+                this._applyTheme(theme);
+                this._updateThemeSwitcher(theme);
+            };
+        }
+
+        // Interface language change
+        const interfaceLangEl = document.getElementById('settingInterfaceLang');
+        if (interfaceLangEl) {
+            interfaceLangEl.onchange = () => {
+                this._applyInterfaceLang(interfaceLangEl.value);
+            };
+        }
+
+        // Feedback
+        const feedbackBtn = document.getElementById('sendFeedbackBtn');
+        if (feedbackBtn) {
+            feedbackBtn.onclick = () => {
+                const text = document.getElementById('feedbackText')?.value?.trim();
+                if (!text) { this.showNotification('Please enter feedback'); return; }
+                try {
+                    const fb = JSON.parse(localStorage.getItem('asr_feedback') || '[]');
+                    fb.push({ text, date: new Date().toISOString(), status: 'new' });
+                    localStorage.setItem('asr_feedback', JSON.stringify(fb));
+                } catch (e) {}
+                document.getElementById('feedbackText').value = '';
+                this.showNotification('Thank you for your feedback!');
+            };
+        }
+    }
+
+    _applyTheme(theme) {
+        let resolved = theme;
+        if (theme === 'system') {
+            resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', resolved);
+        this._currentTheme = theme;
+    }
+
+    _updateThemeSwitcher(theme) {
+        const switcher = document.getElementById('themeSwitcher');
+        if (!switcher) return;
+        switcher.querySelectorAll('.theme-opt').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === theme);
+        });
+    }
+
+    /* ═══════════ INTERFACE LANGUAGE (i18n) ═══════════ */
+
+    _applyInterfaceLang(lang) {
+        this._interfaceLang = lang;
+        const t = this._i18n[lang] || this._i18n['en'];
+
+        // Toolbar
+        const logoEl = document.querySelector('.logo-text');
+        if (logoEl) logoEl.textContent = t.appTitle;
+
+        // Context button
+        if (this.el.contextBtn) this.el.contextBtn.title = t.contextSettings;
+
+        // Timer area — no text needed
+
+        // Settings modal
+        const settingsTitle = this.el.settingsModal?.querySelector('.modal-header h3');
+        if (settingsTitle) settingsTitle.textContent = t.settings;
+        const appearanceH4 = this.el.settingsModal?.querySelector('.settings-section:first-child h4');
+        if (appearanceH4) appearanceH4.textContent = t.appearance;
+        const themeLabel = this.el.settingsModal?.querySelector('.settings-section:first-child .setting-row:first-child span');
+        if (themeLabel) themeLabel.textContent = t.theme;
+        const langLabel = this.el.settingsModal?.querySelector('.settings-section:first-child .setting-row:last-child span');
+        if (langLabel) langLabel.textContent = t.interfaceLang;
+        const feedbackH4 = this.el.settingsModal?.querySelector('.settings-section:last-child h4');
+        if (feedbackH4) feedbackH4.textContent = t.feedback;
+        const feedbackArea = document.getElementById('feedbackText');
+        if (feedbackArea) feedbackArea.placeholder = t.feedbackPlaceholder;
+        const feedbackBtn = document.getElementById('sendFeedbackBtn');
+        if (feedbackBtn) feedbackBtn.textContent = t.sendFeedback;
+        const doneBtn = this.el.settingsSave;
+        if (doneBtn) doneBtn.textContent = t.done;
+
+        // Context modal
+        const ctxTitle = this.el.contextModal?.querySelector('.modal-header h3');
+        if (ctxTitle) ctxTitle.textContent = t.contextSettings;
+        const topicLabel = this.el.contextModal?.querySelector('.form-group:first-child label');
+        if (topicLabel) topicLabel.textContent = t.lectureTopic;
+        const templateLabel = this.el.contextModal?.querySelectorAll('.form-group')[1]?.querySelector('label');
+        if (templateLabel) templateLabel.textContent = t.quickTemplates;
+        const kwLabel = this.el.contextModal?.querySelectorAll('.form-group')[2]?.querySelector('label');
+        if (kwLabel) kwLabel.textContent = t.keywords;
+        const ctxLabel = this.el.contextModal?.querySelectorAll('.form-group')[3]?.querySelector('label');
+        if (ctxLabel) ctxLabel.textContent = t.context;
+
+        // Sidebar header
+        const sidebarH3 = document.querySelector('.sidebar-header h3');
+        if (sidebarH3) sidebarH3.textContent = t.history;
+        const viewAllBtn = document.querySelector('.sidebar-btn');
+        if (viewAllBtn) {
+            const svg = viewAllBtn.querySelector('svg');
+            viewAllBtn.textContent = '';
+            if (svg) viewAllBtn.appendChild(svg);
+            viewAllBtn.append(' ' + t.viewAll);
+        }
+
+        // Record button
+        if (this.el.recordBtn) this.el.recordBtn.title = t.record;
+
+        // Empty state
+        const emptyP = this.el.panelContent?.querySelector('.empty-state p:not(.loading-status):not(.loading-hint)');
+        if (emptyP && emptyP.textContent.includes('record')) emptyP.textContent = t.clickRecord;
+    }
+
+    get _i18n() {
+        return {
+            en: {
+                appTitle: 'ASR Thesis',
+                settings: 'Settings',
+                appearance: 'Appearance',
+                theme: 'Theme',
+                interfaceLang: 'Interface language',
+                feedback: 'Feedback',
+                feedbackPlaceholder: 'Report a bug or suggest a feature...',
+                sendFeedback: 'Send Feedback',
+                done: 'Done',
+                contextSettings: 'Context Settings',
+                lectureTopic: 'Lecture Topic',
+                quickTemplates: 'Quick Templates',
+                keywords: 'Keywords',
+                context: 'Context',
+                history: 'History',
+                viewAll: 'View All',
+                record: 'Record',
+                clickRecord: 'Click record to start',
+            },
+            vi: {
+                appTitle: 'ASR Thesis',
+                settings: 'Cài đặt',
+                appearance: 'Giao diện',
+                theme: 'Chủ đề',
+                interfaceLang: 'Ngôn ngữ giao diện',
+                feedback: 'Phản hồi',
+                feedbackPlaceholder: 'Báo lỗi hoặc đề xuất tính năng...',
+                sendFeedback: 'Gửi phản hồi',
+                done: 'Xong',
+                contextSettings: 'Cài đặt ngữ cảnh',
+                lectureTopic: 'Chủ đề bài giảng',
+                quickTemplates: 'Mẫu nhanh',
+                keywords: 'Từ khóa',
+                context: 'Ngữ cảnh',
+                history: 'Lịch sử',
+                viewAll: 'Xem tất cả',
+                record: 'Ghi âm',
+                clickRecord: 'Nhấn nút ghi âm để bắt đầu',
+            },
+        };
+    }
+
+    saveSettings() {
+        const interfaceLang = document.getElementById('settingInterfaceLang')?.value || 'en';
+        const theme = this._currentTheme || 'light';
+        localStorage.setItem('asr_settings', JSON.stringify({ interfaceLang, theme }));
+    }
+
+    getSettings() {
+        try {
+            return JSON.parse(localStorage.getItem('asr_settings') || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
     /* ═══════════ SIDEBAR ═══════════ */
 
     toggleSidebar() {
@@ -711,11 +1084,13 @@ class UIManager {
                 const name = rec.customName || `${rec.date} ${rec.time}`;
                 const count = rec.transcript?.length || 0;
                 const starred = rec.starred ? '⭐ ' : '';
+                const tags = (rec.tags || []).map(t => `<span class="rec-tag">${t}</span>`).join('');
                 return `
                     <div class="recording-card" data-id="${rec.id}">
                         <div class="recording-info">
                             <div class="recording-date">${starred}${name}</div>
                             <div class="recording-duration">${rec.duration || '00:00'} • ${count} segs</div>
+                            ${tags ? `<div class="recording-tags">${tags}</div>` : ''}
                         </div>
                         <div class="recording-card-actions">
                             <button class="btn-view-small" data-action="view" data-id="${rec.id}">👁</button>

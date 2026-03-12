@@ -35,7 +35,7 @@
               </div>
               <div class="dropdown-divider"></div>
               <div class="dropdown-item" data-source="computer">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:middle">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-item-icon">
                   <rect x="2" y="3" width="20" height="14" rx="2" />
                   <line x1="8" y1="21" x2="16" y2="21" />
                   <line x1="12" y1="17" x2="12" y2="21" />
@@ -61,9 +61,15 @@
           <!-- Context button — next to record -->
           <button class="btn-icon" id="contextBtn" title="Context Settings">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3" />
-              <path
-                d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              <line x1="4" y1="21" x2="4" y2="14"/>
+              <line x1="4" y1="10" x2="4" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12" y2="3"/>
+              <line x1="20" y1="21" x2="20" y2="16"/>
+              <line x1="20" y1="12" x2="20" y2="3"/>
+              <line x1="1" y1="14" x2="7" y2="14"/>
+              <line x1="9" y1="8" x2="15" y2="8"/>
+              <line x1="17" y1="16" x2="23" y2="16"/>
             </svg>
           </button>
 
@@ -75,6 +81,13 @@
             </svg>
             <div class="record-loading-spinner hidden" id="recordLoadingSpinner"></div>
           </button>
+          <button class="btn-icon screen-share-btn hidden" id="screenShareBtn" title="Share Screen">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          </button>
         </div>
 
         <div class="toolbar-center">
@@ -82,6 +95,18 @@
         </div>
 
         <div class="toolbar-right">
+          <button class="btn-icon settings-icon" id="settingsBtn" title="Settings">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+          <button class="btn-icon login-btn" id="loginBtn" title="Sign in">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </button>
           <button class="btn-icon" id="sidebarToggle" title="History">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -103,7 +128,21 @@
               </svg>
               Screen Share
             </span>
-            <button class="btn-icon btn-icon-sm" id="stopScreenBtn" title="Stop sharing">✕</button>
+            <div class="screen-header-actions">
+              <button class="btn-icon btn-icon-sm" id="pipBtn" title="Picture in Picture">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="3" width="20" height="14" rx="2"/>
+                  <rect x="12" y="9" width="8" height="6" rx="1" fill="currentColor" opacity="0.3"/>
+                </svg>
+              </button>
+              <button class="btn-icon btn-icon-sm" id="screenLayoutBtn" title="Toggle layout">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="3" width="20" height="18" rx="2"/>
+                  <line x1="12" y1="3" x2="12" y2="21"/>
+                </svg>
+              </button>
+              <button class="btn-icon btn-icon-sm" id="stopScreenBtn" title="Stop sharing">✕</button>
+            </div>
           </div>
           <div class="screen-video-wrap" id="screenVideoWrap">
             <video id="screenPreview" autoplay muted playsinline></video>
@@ -113,28 +152,23 @@
         <!-- Panel Resizer (drag to resize when screen panel visible) -->
         <div class="panel-resizer" id="panelResizer"></div>
 
+        <!-- Main: Transcript + Sidebar row -->
+        <div class="content-main">
         <!-- Transcript Panel -->
         <div class="transcript-panel">
           <div class="panel-header">
             <!-- Language Selectors -->
             <div class="lang-group">
-              <div class="dropdown lang-dropdown" id="srcLangDropdown">
-                <button class="lang-btn" id="srcLangBtn">
-                  <span class="lang-flag" id="srcLangFlag">🇻🇳</span>
-                  <span class="lang-name" id="srcLangName">Vietnamese</span>
-                  <span class="dropdown-arrow"></span>
-                </button>
-                <div class="dropdown-menu lang-menu" id="srcLangMenu"></div>
+              <div class="lang-fixed-label">
+                <span class="lang-flag">🌐</span>
+                <span class="lang-name">Any</span>
               </div>
 
-              <button class="swap-btn" id="swapLangBtn" title="Swap languages">
+              <span class="lang-arrow-icon">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="17 1 21 5 17 9" />
-                  <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                  <polyline points="7 23 3 19 7 15" />
-                  <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                  <polyline points="9 6 15 12 9 18" />
                 </svg>
-              </button>
+              </span>
 
               <div class="dropdown lang-dropdown" id="tgtLangDropdown">
                 <button class="lang-btn" id="tgtLangBtn">
@@ -149,13 +183,12 @@
             <div class="panel-actions">
               <button class="btn-icon" id="displayModeBtn" title="Toggle: Mixed / Split">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="3" y1="6" x2="21" y2="6"/>
-                  <line x1="3" y1="12" x2="21" y2="12"/>
-                  <line x1="3" y1="18" x2="15" y2="18"/>
+                  <rect x="3" y="3" width="18" height="7" rx="1"/>
+                  <rect x="3" y="14" width="18" height="7" rx="1"/>
                 </svg>
               </button>
-              <button class="btn-icon" id="fontDecrease" title="Smaller">A-</button>
               <button class="btn-icon" id="fontIncrease" title="Larger">A+</button>
+              <button class="btn-icon" id="fontDecrease" title="Smaller">A-</button>
               <button class="btn-icon" id="clearBtn" title="Clear">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6" />
@@ -192,6 +225,7 @@
             </div>
           </div>
         </aside>
+        </div>
       </div>
     </main>
   </div>
@@ -200,17 +234,27 @@
   <div class="modal-overlay" id="contextModal">
     <div class="modal">
       <div class="modal-header">
-        <h3>⚙️ Context Settings</h3>
+        <h3>Context Settings</h3>
         <button class="modal-close" id="closeModal" title="Close">×</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
           <label>Lecture Topic</label>
           <div class="input-icon-wrapper">
-            <span class="input-icon">✨</span>
             <input type="text" id="lectureTopic" placeholder="Enter lecture topic to boost accuracy..." maxlength="200">
           </div>
           <small class="form-hint">AI will expand this into keywords and context to improve recognition</small>
+        </div>
+        <div class="form-group">
+          <label>Quick Templates</label>
+          <div class="template-chips" id="templateChips">
+            <button class="template-chip" data-template="meeting">📋 Meeting</button>
+            <button class="template-chip" data-template="lecture">🎓 Lecture</button>
+            <button class="template-chip" data-template="interview">💼 Interview</button>
+            <button class="template-chip" data-template="medical">🏥 Medical</button>
+            <button class="template-chip" data-template="tech">💻 Tech Talk</button>
+            <button class="template-chip" data-template="legal">⚖️ Legal</button>
+          </div>
         </div>
         <div class="form-group">
           <label>Keywords</label>
@@ -218,7 +262,7 @@
         </div>
         <div class="form-group">
           <label>Context</label>
-          <textarea id="context" placeholder="Lecture about artificial intelligence..."></textarea>
+          <textarea id="context" placeholder="e.g. This script is about AI and deep learning. You should use technical terms like 'neural network', 'backpropagation'..."></textarea>
           <small class="form-hint">Provides richer context for better speech recognition accuracy</small>
         </div>
       </div>
@@ -262,6 +306,75 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" id="deleteModalCancel">Cancel</button>
         <button class="btn btn-danger" id="deleteModalConfirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal modal-settings">
+      <div class="modal-header">
+        <h3>Settings</h3>
+        <button class="modal-close" id="settingsClose" title="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <h4>Appearance</h4>
+          <div class="setting-row">
+            <span>Theme</span>
+            <div class="theme-switcher" id="themeSwitcher">
+              <button class="theme-opt active" data-theme="light" title="Light">☀️</button>
+              <button class="theme-opt" data-theme="dark" title="Dark">🌙</button>
+              <button class="theme-opt" data-theme="system" title="System">💻</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>Interface language</span>
+            <select id="settingInterfaceLang" class="setting-select" title="Interface language">
+              <option value="vi">Tiếng Việt</option>
+              <option value="en" selected>English</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h4>Feedback</h4>
+          <div class="form-group form-group-compact">
+            <textarea id="feedbackText" placeholder="Report a bug or suggest a feature..." rows="3"></textarea>
+          </div>
+          <button class="btn btn-accent btn-sm feedback-send-btn" id="sendFeedbackBtn">Send Feedback</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="settingsSave">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Modal -->
+  <div class="modal-overlay" id="loginModal">
+    <div class="modal modal-login">
+      <div class="modal-header">
+        <h3>Sign In</h3>
+        <button class="modal-close" id="loginClose" title="Close">×</button>
+      </div>
+      <div class="modal-body login-body">
+        <div class="login-avatar">
+          <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="var(--text-muted)" stroke-width="1.5">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+        </div>
+        <p class="login-desc">Sign in to sync recordings and settings across devices</p>
+        <button class="btn-google" id="googleSignIn">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Continue with Google
+        </button>
+        <p class="login-hint">Coming soon — save recordings to the cloud</p>
       </div>
     </div>
   </div>

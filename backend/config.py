@@ -39,6 +39,9 @@ AGREEMENT_N = 2
 # Hallucination Filter
 HALLUCINATION_HISTORY_SIZE = 5
 
+# Sentence-level translation
+MT_FLUSH_TIMEOUT = 2.5  # seconds to wait before flushing incomplete sentence
+
 # Groq LLM (context priming + auto summary)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = "llama-3.1-8b-instant"

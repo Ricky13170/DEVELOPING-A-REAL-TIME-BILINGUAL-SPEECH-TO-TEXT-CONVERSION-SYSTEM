@@ -5,19 +5,11 @@
 export const LANGUAGES = [
   {
     code: "auto",
-    name: "Auto Detect",
+    name: "Auto",
     nameNative: "Auto",
     flag: "🌐",
     whisper: null,
     nllb: null,
-  },
-  {
-    code: "vi",
-    name: "Vietnamese",
-    nameNative: "Tiếng Việt",
-    flag: "🇻🇳",
-    whisper: "vi",
-    nllb: "vie_Latn",
   },
   {
     code: "en",
@@ -28,12 +20,12 @@ export const LANGUAGES = [
     nllb: "eng_Latn",
   },
   {
-    code: "zh",
-    name: "Chinese",
-    nameNative: "中文",
-    flag: "🇨🇳",
-    whisper: "zh",
-    nllb: "zho_Hans",
+    code: "vi",
+    name: "Tieng Viet",
+    nameNative: "Tiếng Việt",
+    flag: "🇻🇳",
+    whisper: "vi",
+    nllb: "vie_Latn",
   },
   {
     code: "ja",
@@ -52,8 +44,16 @@ export const LANGUAGES = [
     nllb: "kor_Hang",
   },
   {
+    code: "zh",
+    name: "Chinese",
+    nameNative: "中文",
+    flag: "🇨🇳",
+    whisper: "zh",
+    nllb: "zho_Hans",
+  },
+  {
     code: "fr",
-    name: "French",
+    name: "Francais",
     nameNative: "Français",
     flag: "🇫🇷",
     whisper: "fr",
@@ -61,7 +61,7 @@ export const LANGUAGES = [
   },
   {
     code: "de",
-    name: "German",
+    name: "Deutsch",
     nameNative: "Deutsch",
     flag: "🇩🇪",
     whisper: "de",
@@ -69,11 +69,27 @@ export const LANGUAGES = [
   },
   {
     code: "es",
-    name: "Spanish",
+    name: "Espanol",
     nameNative: "Español",
     flag: "🇪🇸",
     whisper: "es",
     nllb: "spa_Latn",
+  },
+  {
+    code: "pt",
+    name: "Portugues",
+    nameNative: "Português",
+    flag: "🇧🇷",
+    whisper: "pt",
+    nllb: "por_Latn",
+  },
+  {
+    code: "id",
+    name: "Bahasa Indonesia",
+    nameNative: "Bahasa",
+    flag: "🇮🇩",
+    whisper: "id",
+    nllb: "ind_Latn",
   },
   {
     code: "th",
@@ -84,36 +100,12 @@ export const LANGUAGES = [
     nllb: "tha_Thai",
   },
   {
-    code: "id",
-    name: "Indonesian",
-    nameNative: "Bahasa",
-    flag: "🇮🇩",
-    whisper: "id",
-    nllb: "ind_Latn",
-  },
-  {
-    code: "pt",
-    name: "Portuguese",
-    nameNative: "Português",
-    flag: "🇧🇷",
-    whisper: "pt",
-    nllb: "por_Latn",
-  },
-  {
     code: "ru",
     name: "Russian",
     nameNative: "Русский",
     flag: "🇷🇺",
     whisper: "ru",
     nllb: "rus_Cyrl",
-  },
-  {
-    code: "ar",
-    name: "Arabic",
-    nameNative: "العربية",
-    flag: "🇸🇦",
-    whisper: "ar",
-    nllb: "arb_Arab",
   },
   {
     code: "hi",
@@ -123,10 +115,18 @@ export const LANGUAGES = [
     whisper: "hi",
     nllb: "hin_Deva",
   },
+  {
+    code: "ar",
+    name: "Arabic",
+    nameNative: "العربية",
+    flag: "🇸🇦",
+    whisper: "ar",
+    nllb: "arb_Arab",
+  },
 ];
 
 /** Default source / target languages */
-export const DEFAULT_SRC = "vi";
+export const DEFAULT_SRC = "auto";
 export const DEFAULT_TGT = "en";
 
 /**

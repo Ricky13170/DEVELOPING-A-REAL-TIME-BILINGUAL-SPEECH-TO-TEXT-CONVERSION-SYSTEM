@@ -1,7 +1,6 @@
 import { AudioManager } from "./audio.js";
 import { SocketManager } from "./socket.js";
 import { UIManager } from "./ui.js";
-import { SubtitleOverlay } from "./subtitle.js";
 import { generateId } from "./utils.js";
 
 class ASRApp {
@@ -9,7 +8,6 @@ class ASRApp {
     this.audioMgr = new AudioManager();
     this.socketMgr = new SocketManager();
     this.uiMgr = new UIManager();
-    this.subtitleOverlay = null;
     this.isRecording = false;
     this.isConnecting = false;
     this.serverReady = false;
@@ -111,15 +109,6 @@ class ASRApp {
       if (data.type === "transcript") {
         this.uiMgr.addTranscriptSegment(data);
 
-        // Update subtitles on screen share
-        if (this.subtitleOverlay) {
-          this.subtitleOverlay.update(
-            data.source || "",
-            data.target || "",
-            data.is_final,
-          );
-        }
-
         if (data.is_final && (data.source || data.target)) {
           const id =
             data.segment_id || Object.keys(this.transcripts).length + 1;
@@ -197,9 +186,10 @@ class ASRApp {
         if (source === "microphone" && deviceId) {
           this.audioMgr.setMicrophone(deviceId);
           this.uiMgr.setAudioSource("microphone");
-          const label = item.textContent.trim();
-          document.getElementById("audioSourceText").textContent =
-            label.substring(0, 15);
+          // Update checkmarks — only mic items
+          audioDropdown.querySelectorAll('.mic-item').forEach(el => {
+            el.classList.toggle('selected', el.dataset.device === deviceId);
+          });
         } else if (source === "computer") {
           this.uiMgr.setAudioSource("computer");
         }
@@ -222,24 +212,11 @@ class ASRApp {
     // Audio manager callbacks for screen share
     this.audioMgr.onScreenStream = (stream) => {
       this.uiMgr.showScreenPanel(stream);
-
-      // Create subtitle overlay
-      const videoWrap = document.getElementById("screenVideoWrap");
-      if (videoWrap && !this.subtitleOverlay) {
-        this.subtitleOverlay = new SubtitleOverlay(videoWrap);
-      }
-
       this.uiMgr.setAudioSource("screen");
     };
 
     this.audioMgr.onScreenStop = () => {
       this.uiMgr.hideScreenPanel();
-
-      if (this.subtitleOverlay) {
-        this.subtitleOverlay.destroy();
-        this.subtitleOverlay = null;
-      }
-
       this.uiMgr.setAudioSource("microphone");
     };
   }
@@ -279,6 +256,10 @@ class ASRApp {
       // Determine audio source
       let source = this.uiMgr.getAudioSource();
       if (this.audioMgr.isScreenSharing) {
+        source = "screen";
+      }
+      // Computer audio → use screen share flow for subtitles
+      if (source === "computer") {
         source = "screen";
       }
       await this.audioMgr.startRecording(source);
@@ -339,6 +320,7 @@ class ASRApp {
       const recordings = JSON.parse(localStorage.getItem("recordings") || "[]");
       const now = new Date();
 
+      const langs = this.uiMgr.getSelectedLanguages();
       const rec = {
         id: this.sessionId,
         date: now.toLocaleDateString("en-CA").replace(/-/g, "."),
@@ -347,6 +329,8 @@ class ASRApp {
           minute: "2-digit",
         }),
         duration: this.uiMgr.el.timer?.textContent || "00:00",
+        sourceLang: langs.srcCode,
+        targetLang: langs.tgtCode,
         transcript: segments.map((t) => ({
           source: t.source || "",
           target: t.target || "",

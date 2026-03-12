@@ -215,6 +215,7 @@ class ASR:
                 body = await request.json()
                 text = body.get("text", "").strip()
                 topic = body.get("topic", "").strip()
+                language = body.get("language", "en").strip()
 
                 if not text:
                     return JSONResponse({"error": "No text provided"}, status_code=400)
@@ -222,8 +223,55 @@ class ASR:
                 if not self.service.groq or not self.service.groq.is_available:
                     return JSONResponse({"error": "Groq service not available"}, status_code=503)
 
-                summary = await self.service.groq.summarize_lecture(text, topic)
-                return JSONResponse({"summary": summary, "topic": topic})
+                summary_raw = await self.service.groq.summarize_lecture(text, topic, language=language)
+                return JSONResponse({"summary": summary_raw.strip(), "topic": topic})
+
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @web_app.post("/api/qa")
+        async def qa(request: Request):
+            """Answer questions about transcript using Groq LLM"""
+            try:
+                body = await request.json()
+                question = body.get("question", "").strip()
+                transcript = body.get("transcript", "").strip()
+                topic = body.get("topic", "").strip()
+
+                if not question or not transcript:
+                    return JSONResponse({"error": "Question and transcript required"}, status_code=400)
+
+                if not self.service.groq or not self.service.groq.is_available:
+                    return JSONResponse({"error": "Groq service not available"}, status_code=503)
+
+                answer = await self.service.groq.answer_question(transcript, question, topic)
+                return JSONResponse({"answer": answer})
+
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @web_app.post("/api/translate")
+        async def translate_text(request: Request):
+            """Translate text using NLLB model"""
+            try:
+                body = await request.json()
+                text = body.get("text", "").strip()
+                src_lang = body.get("src_lang", "eng_Latn").strip()
+                tgt_lang = body.get("tgt_lang", "vie_Latn").strip()
+
+                if not text:
+                    return JSONResponse({"error": "No text provided"}, status_code=400)
+
+                if not self.service.translator or not self.service.translator.is_loaded:
+                    return JSONResponse({"error": "Translation model not available"}, status_code=503)
+
+                import asyncio
+                loop = asyncio.get_event_loop()
+                translated = await loop.run_in_executor(
+                    None,
+                    lambda: self.service.translator.translate(text, src_lang=src_lang, tgt_lang=tgt_lang)
+                )
+                return JSONResponse({"translated": translated})
 
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)

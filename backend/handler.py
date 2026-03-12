@@ -13,6 +13,7 @@ from backend.config import (
     GROQ_API_KEY, AUTO_SUMMARY_MIN_DURATION,
     WHISPER_MODEL, WHISPER_LANGUAGE, ASR_DEVICE,
     NLLB_MODEL, NLLB_SRC_LANG, NLLB_TGT_LANG, NLLB_DEVICE,
+    MT_FLUSH_TIMEOUT,
 )
 from backend.asr import WhisperASR
 from backend.translation import NLLBTranslator
@@ -93,6 +94,10 @@ class ASRSession:
         self.pending_partial_text = None      
         self.pending_partial_time = None      
         self.PARTIAL_FINALIZE_TIMEOUT = 3.0 
+        
+        # Sentence buffer: accumulate final segments, translate on sentence boundary
+        self._mt_buffer = []       # list of (text, seg_id)
+        self._mt_flush_time = None
         
         # Language config (per-session, overrideable by client)
         self.do_translate = True
@@ -247,7 +252,9 @@ class ASRSession:
         self.segmenter.reset()
         self.agreement.reset()
         self.hallucination_filter.reset()
-        self.transcript_history = []  
+        self.transcript_history = []
+        self._mt_buffer = []
+        self._mt_flush_time = None
         # Cancel previous background tasks
         for task in list(self.bg_tasks):
             task.cancel()
@@ -302,6 +309,11 @@ class ASRSession:
         if self.pending_partial_text and self.pending_partial_time:
             if time.time() - self.pending_partial_time > self.PARTIAL_FINALIZE_TIMEOUT:
                 await self._finalize_pending_partial()
+
+        # Flush sentence buffer if waiting too long
+        if self._mt_buffer and self._mt_flush_time:
+            if time.time() - self._mt_flush_time > MT_FLUSH_TIMEOUT:
+                self._create_tracked_task(self._flush_translation())
 
         # Decode audio
         audio_b64 = data.get("audio", "")
@@ -432,12 +444,16 @@ class ASRSession:
         }))
         
         if is_final and stable_text:
-            # Run translation
+            # Buffer for sentence-level translation (wait for complete sentence)
             if self.do_translate:
-                self._create_tracked_task(self._translate(stable_text, self.segment_id))
+                self._mt_buffer.append((stable_text, self.segment_id))
+                self._mt_flush_time = time.time()
+                combined = " ".join(t for t, _ in self._mt_buffer)
+                if self._is_sentence_end(combined):
+                    self._create_tracked_task(self._flush_translation())
 
-    async def _translate(self, text: str, seg_id: int):
-        """Translate using session language pair"""
+    async def _translate(self, text: str, seg_id: int, source_display: str = None):
+        """Translate text and emit result to client"""
         loop = asyncio.get_event_loop()
         
         try:
@@ -456,7 +472,7 @@ class ASRSession:
                 await self.out_queue.put(json.dumps({
                     "type": "transcript",
                     "segment_id": seg_id,
-                    "source": text,
+                    "source": source_display or text,
                     "target": translated,
                     "is_final": True,
                     "confidence": 1.0
@@ -464,11 +480,47 @@ class ASRSession:
         except Exception as e:
             print(f"[MT] Error: {e}")
 
+    async def _flush_translation(self):
+        """Flush sentence buffer — translate accumulated segments as one unit"""
+        if not self._mt_buffer:
+            return
+        
+        items = list(self._mt_buffer)
+        self._mt_buffer.clear()
+        self._mt_flush_time = None
+        
+        combined_text = " ".join(t for t, _ in items)
+        last_seg_id = items[-1][1]
+        last_source = items[-1][0]
+        
+        if len(items) > 1:
+            print(f"[MT] Sentence buffer: merged {len(items)} segments \u2192 translate as one")
+        
+        await self._translate(combined_text, last_seg_id, source_display=last_source)
+
+    @staticmethod
+    def _is_sentence_end(text: str) -> bool:
+        """Check if accumulated text ends with sentence-ending punctuation"""
+        text = text.rstrip()
+        if not text:
+            return False
+        # Don't treat '...' or '\u2026' as sentence end
+        if text.endswith('...') or text.endswith('\u2026'):
+            return False
+        return text[-1] in '.?!\u3002\uff1f\uff01'
+
     async def _handle_stop(self):
         """Stop recording session"""
         print("[Session] STOP")
         
         self.is_recording = False
+        
+        # Flush any remaining partial + sentence buffer before stopping
+        if self.pending_partial_text:
+            await self._finalize_pending_partial()
+        if self._mt_buffer:
+            await self._flush_translation()
+        
         session_duration = (datetime.now() - self.session_start).total_seconds() if self.session_start else 0
         
         await self.out_queue.put(json.dumps({
@@ -550,9 +602,13 @@ class ASRSession:
             "timestamp": self._get_timestamp()
         }))
     
-        # Trigger translation
+        # Add to sentence translation buffer
         if self.do_translate:
-            self._create_tracked_task(self._translate(stable_text, self.segment_id))
+            self._mt_buffer.append((stable_text, self.segment_id))
+            self._mt_flush_time = time.time()
+            combined = " ".join(t for t, _ in self._mt_buffer)
+            if self._is_sentence_end(combined):
+                self._create_tracked_task(self._flush_translation())
     
         # Clear pending
         self.pending_partial_text = None

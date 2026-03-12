@@ -11,6 +11,12 @@ class RecordingsManager {
         this.summaryContent = document.getElementById('summaryContent');
         this.notification = document.getElementById('notification');
 
+        this.summaryLangSelect = document.getElementById('summaryLangSelect');
+        this.qaPanel = document.getElementById('qaPanel');
+        this.qaChat = document.getElementById('qaChat');
+        this.qaInput = document.getElementById('qaInput');
+        this.contentBody = document.getElementById('contentBody');
+
         this.selectedId = null;
         this.recordings = [];
         this.menuOpenId = null;
@@ -21,6 +27,7 @@ class RecordingsManager {
         this.setupListeners();
         this.setupModals();
         this.setupSummarize();
+        this.setupQA();
 
 
         const preSelected = localStorage.getItem('selectedRecordingId');
@@ -60,18 +67,21 @@ class RecordingsManager {
             const count = rec.transcript?.length || 0;
             const active = String(rec.id) === String(this.selectedId) ? 'active' : '';
             const starred = rec.starred ? '⭐ ' : '';
+            const tags = (rec.tags || []).map(t => `<span class="rec-tag">${this._escapeHtml(t)}</span>`).join('');
 
             return `
                 <div class="recording-item ${active}" data-id="${rec.id}">
                     <div class="recording-info">
-                        <div class="recording-date">${starred}${name}</div>
+                        <div class="recording-date">${starred}${this._escapeHtml(name)}</div>
                         <div class="recording-time">${rec.duration || '00:00'} • ${count} segments</div>
+                        ${tags ? `<div class="recording-tags">${tags}</div>` : ''}
                     </div>
                     <div class="recording-actions">
                         <button class="menu-btn" data-menu="${rec.id}" title="Options">⋮</button>
                         <div class="context-menu" id="menu-${rec.id}">
                             <div class="context-menu-item" data-action="rename" data-id="${rec.id}">Rename</div>
                             <div class="context-menu-item" data-action="star" data-id="${rec.id}">${rec.starred ? 'Unstar' : 'Star'}</div>
+                            <div class="context-menu-item" data-action="tag" data-id="${rec.id}">Add Tag</div>
                             <div class="context-menu-item" data-action="export" data-id="${rec.id}">Export</div>
                             <div class="context-menu-item delete" data-action="delete" data-id="${rec.id}">Delete</div>
                         </div>
@@ -135,6 +145,7 @@ class RecordingsManager {
         switch (action) {
             case 'rename': this.showRenameModal(id); break;
             case 'star': this.toggleStar(id); break;
+            case 'tag': this.showTagModal(id); break;
             case 'export': this.exportRecording(id); break;
             case 'delete': this.showDeleteModal(id); break;
         }
@@ -145,8 +156,70 @@ class RecordingsManager {
         if (rec) {
             rec.starred = !rec.starred;
             this.saveRecordings();
-            this.loadRecordings();
+            this.renderList();
+            if (String(this.selectedId) === String(id)) this.selectRecording(id);
         }
+    }
+
+    showTagModal(id) {
+        this.pendingTagId = id;
+        const input = document.getElementById('tagInput');
+        if (input) input.value = '';
+        this._renderTagList();
+        document.getElementById('tagModal')?.classList.add('active');
+    }
+
+    hideTagModal() {
+        document.getElementById('tagModal')?.classList.remove('active');
+        this.pendingTagId = null;
+    }
+
+    _renderTagList() {
+        const container = document.getElementById('tagListManage');
+        if (!container) return;
+        const rec = this.recordings.find(r => String(r.id) === String(this.pendingTagId));
+        const tags = rec?.tags || [];
+        if (tags.length === 0) {
+            container.innerHTML = '<div class="empty-tags-hint">No tags yet</div>';
+            return;
+        }
+        container.innerHTML = tags.map(t => `
+            <div class="tag-manage-item">
+                <span class="tag-manage-label">${this._escapeHtml(t)}</span>
+                <button class="tag-manage-delete" data-remove-tag="${this._escapeHtml(t)}" title="Remove">&times;</button>
+            </div>
+        `).join('');
+    }
+
+    removeTag(tagName) {
+        const rec = this.recordings.find(r => String(r.id) === String(this.pendingTagId));
+        if (!rec || !rec.tags) return;
+        rec.tags = rec.tags.filter(t => t !== tagName);
+        this.saveRecordings();
+        this.renderList();
+        this._renderTagList();
+        if (String(this.selectedId) === String(this.pendingTagId)) this.selectRecording(this.pendingTagId);
+    }
+
+    saveTag(tagValue) {
+        const tag = (tagValue || '').trim().toLowerCase().substring(0, 20);
+        if (!tag || !this.pendingTagId) return;
+        const rec = this.recordings.find(r => String(r.id) === String(this.pendingTagId));
+        if (rec) {
+            if (!rec.tags) rec.tags = [];
+            if (!rec.tags.includes(tag)) {
+                rec.tags.push(tag);
+                this.saveRecordings();
+                this.renderList();
+            }
+        }
+        const input = document.getElementById('tagInput');
+        if (input) input.value = '';
+        this._renderTagList();
+    }
+
+    addTag(id) {
+        this.showTagModal(id);
     }
 
     exportRecording(id) {
@@ -180,6 +253,33 @@ class RecordingsManager {
         if (deleteModal) deleteModal.onclick = (e) => {
             if (e.target === deleteModal) this.hideDeleteModal();
         };
+
+        // Tag modal
+        const tagModal = document.getElementById('tagModal');
+        const tagClose = document.getElementById('tagModalClose');
+        const tagCancel = document.getElementById('tagModalCancel');
+        const tagSave = document.getElementById('tagModalSave');
+        const tagInput = document.getElementById('tagInput');
+        const tagSuggestions = document.getElementById('tagSuggestions');
+        const tagListManage = document.getElementById('tagListManage');
+
+        if (tagClose) tagClose.onclick = () => this.hideTagModal();
+        if (tagCancel) tagCancel.onclick = () => this.hideTagModal();
+        if (tagSave) tagSave.onclick = () => this.saveTag(tagInput?.value);
+        if (tagInput) tagInput.onkeydown = (e) => { if (e.key === 'Enter') this.saveTag(tagInput.value); };
+        if (tagModal) tagModal.onclick = (e) => { if (e.target === tagModal) this.hideTagModal(); };
+        if (tagSuggestions) {
+            tagSuggestions.onclick = (e) => {
+                const chip = e.target.closest('[data-tag]');
+                if (chip) this.saveTag(chip.dataset.tag);
+            };
+        }
+        if (tagListManage) {
+            tagListManage.onclick = (e) => {
+                const delBtn = e.target.closest('[data-remove-tag]');
+                if (delBtn) this.removeTag(delBtn.dataset.removeTag);
+            };
+        }
     }
 
     showRenameModal(id) {
@@ -266,6 +366,10 @@ class RecordingsManager {
         const starred = rec.starred ? '⭐ ' : '';
         if (this.titleEl) this.titleEl.textContent = starred + name;
         if (this.subtitleEl) this.subtitleEl.textContent = `${rec.duration || '00:00'} • ${rec.transcript?.length || 0} segments`;
+
+        // Reset summary state for new recording
+        this._originalSummary = null;
+        if (this.viewSummaryBtn) this.viewSummaryBtn.classList.add('hidden');
 
         this.renderTranscript(rec.transcript || []);
     }
@@ -382,6 +486,15 @@ class RecordingsManager {
             this.summarizeBtn.onclick = () => this.summarizeSelected();
         }
 
+        this.viewSummaryBtn = document.getElementById('viewSummaryBtn');
+        if (this.viewSummaryBtn) {
+            this.viewSummaryBtn.onclick = () => {
+                if (this._originalSummary && this.summaryModal) {
+                    this.summaryModal.classList.add('active');
+                }
+            };
+        }
+
         const closeSummaryBtn = document.getElementById('closeSummaryBtn');
         const closeSummaryX = document.getElementById('closeSummaryModal');
         const copySummaryBtn = document.getElementById('copySummaryBtn');
@@ -407,6 +520,23 @@ class RecordingsManager {
                 if (e.target === this.summaryModal) closeSummary();
             };
         }
+
+        // Language change → translate via NLLB
+        if (this.summaryLangSelect) {
+            this.summaryLangSelect.onchange = () => this._translateSummary();
+        }
+
+        // Font size controls
+        this._summaryFontSize = parseFloat(localStorage.getItem('summaryFontSize') || '0.95');
+        const fontDec = document.getElementById('summaryFontDec');
+        const fontInc = document.getElementById('summaryFontInc');
+        const applySize = () => {
+            if (this.summaryContent) this.summaryContent.style.fontSize = `${this._summaryFontSize}rem`;
+            localStorage.setItem('summaryFontSize', String(this._summaryFontSize));
+        };
+        applySize();
+        if (fontDec) fontDec.onclick = () => { this._summaryFontSize = Math.max(0.7, this._summaryFontSize - 0.05); applySize(); };
+        if (fontInc) fontInc.onclick = () => { this._summaryFontSize = Math.min(1.6, this._summaryFontSize + 0.05); applySize(); };
     }
 
     async summarizeSelected() {
@@ -416,7 +546,6 @@ class RecordingsManager {
             return;
         }
 
-        // Collect all source text
         const text = rec.transcript
             .map(t => t.vi || t.source || '')
             .filter(s => s.trim())
@@ -427,6 +556,7 @@ class RecordingsManager {
             return;
         }
 
+        // Always generate in English
         this.showNotification('Generating summary...');
         if (this.summarizeBtn) this.summarizeBtn.disabled = true;
 
@@ -434,12 +564,16 @@ class RecordingsManager {
             const resp = await fetch('/api/summarize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, topic: rec.customName || '' })
+                body: JSON.stringify({ text, topic: rec.customName || '', language: 'en' })
             });
 
             if (resp.ok) {
                 const data = await resp.json();
-                this.showSummary(data.summary || 'No summary generated.');
+                this._originalSummary = data.summary || 'No summary generated.';
+                // Reset dropdown to English
+                if (this.summaryLangSelect) this.summaryLangSelect.value = 'en';
+                this.showSummary(this._originalSummary);
+                if (this.viewSummaryBtn) this.viewSummaryBtn.classList.remove('hidden');
             } else {
                 this.showNotification('Could not generate summary');
             }
@@ -450,18 +584,63 @@ class RecordingsManager {
         }
     }
 
-    showSummary(summary) {
-        if (!summary || !this.summaryModal) return;
+    async _translateSummary() {
+        const lang = this.summaryLangSelect?.value;
+        if (!lang || !this._originalSummary) return;
 
-        let html = summary
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-            .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-            .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-            .replace(/^- (.+)$/gm, '<li>$1</li>')
-            .replace(/\n/g, '<br>');
+        if (lang === 'en') {
+            this.showSummary(this._originalSummary);
+            return;
+        }
 
-        if (this.summaryContent) this.summaryContent.innerHTML = html;
+        const option = this.summaryLangSelect.selectedOptions[0];
+        const tgtNllb = option?.dataset?.nllb;
+        if (!tgtNllb) return;
+
+        if (this.summaryContent) {
+            this.summaryContent.innerHTML = '<div class="summary-loading">Translating...</div>';
+        }
+
+        try {
+            const resp = await fetch('/api/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: this._originalSummary, src_lang: 'eng_Latn', tgt_lang: tgtNllb })
+            });
+
+            if (!resp.ok) {
+                this.showNotification('Translation failed');
+                this.showSummary(this._originalSummary);
+                return;
+            }
+
+            const data = await resp.json();
+            this.showSummary(data.translated || this._originalSummary);
+        } catch (e) {
+            this.showNotification('Translation failed');
+            this.showSummary(this._originalSummary);
+        }
+    }
+
+    showSummary(text) {
+        if (!text || !this.summaryModal) return;
+
+        // Render plain text: each line → <p>, ALL-CAPS lines → section title
+        const lines = text.split('\n');
+        const htmlParts = [];
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            // Detect section headers: ALL CAPS or ending with colon
+            if (/^[A-Z][A-Z\s&\/]{2,}:?$/.test(trimmed) || /^[\p{Lu}][\p{Lu}\s&\/]{2,}:?$/u.test(trimmed)) {
+                htmlParts.push(`<div class="summary-section-title">${this._escapeHtml(trimmed.replace(/:$/, ''))}</div>`);
+            } else {
+                htmlParts.push(`<p>${this._escapeHtml(trimmed)}</p>`);
+            }
+        }
+
+        if (this.summaryContent) this.summaryContent.innerHTML = htmlParts.join('');
         this.summaryModal.classList.add('active');
         this.showNotification('Summary ready!');
     }
@@ -471,6 +650,145 @@ class RecordingsManager {
         this.notification.textContent = msg;
         this.notification.classList.add('active');
         setTimeout(() => this.notification.classList.remove('active'), 2500);
+    }
+
+    /* ═══════════ AI Q&A ═══════════ */
+
+    setupQA() {
+        const closeQaPanel = document.getElementById('closeQaPanel');
+        const askAiBtn = document.getElementById('askAiBtn');
+        const qaSendBtn = document.getElementById('qaSendBtn');
+
+        if (closeQaPanel) closeQaPanel.onclick = () => this.closeQA();
+        if (askAiBtn) {
+            askAiBtn.onclick = () => {
+                this.summaryModal?.classList.remove('active');
+                this.openQA();
+            };
+        }
+        if (qaSendBtn) qaSendBtn.onclick = () => this.sendQA();
+        if (this.qaInput) {
+            this.qaInput.onkeydown = (e) => { if (e.key === 'Enter') this.sendQA(); };
+        }
+
+        // Q&A panel resizer
+        this._setupQAResizer();
+    }
+
+    _setupQAResizer() {
+        const resizer = document.getElementById('qaResizer');
+        if (!resizer || !this.qaPanel || !this.contentBody) return;
+
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        const onStart = (e) => {
+            isResizing = true;
+            startX = e.clientX || e.touches?.[0]?.clientX || 0;
+            startWidth = this.qaPanel.offsetWidth;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        };
+
+        const onMove = (e) => {
+            if (!isResizing) return;
+            const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
+            const dx = startX - clientX; // dragging left = wider panel
+            const containerW = this.contentBody.offsetWidth;
+            const newWidth = Math.max(280, Math.min(containerW * 0.7, startWidth + dx));
+            this.qaPanel.style.width = `${newWidth}px`;
+        };
+
+        const onEnd = () => {
+            if (!isResizing) return;
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+
+        resizer.addEventListener('mousedown', onStart);
+        resizer.addEventListener('touchstart', onStart, { passive: false });
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('mouseup', onEnd);
+        document.addEventListener('touchend', onEnd);
+    }
+
+    openQA() {
+        if (!this.qaPanel) return;
+        if (this.qaChat) {
+            this.qaChat.innerHTML = '<div class="qa-welcome"><div class="qa-welcome-icon">✦</div><p>Ask any question about the transcript content.</p></div>';
+        }
+        this.qaPanel.classList.remove('hidden');
+        this.contentBody?.classList.add('qa-active');
+        this.qaInput?.focus();
+    }
+
+    closeQA() {
+        this.qaPanel?.classList.add('hidden');
+        this.contentBody?.classList.remove('qa-active');
+        if (this.qaPanel) this.qaPanel.style.width = '';
+    }
+
+    async sendQA() {
+        const question = this.qaInput?.value?.trim();
+        if (!question) return;
+
+        const rec = this.recordings.find(r => String(r.id) === String(this.selectedId));
+        if (!rec || !rec.transcript?.length) {
+            this.showNotification('No transcript available');
+            return;
+        }
+
+        // Add user message
+        this._appendQAMessage('user', question);
+        this.qaInput.value = '';
+
+        const transcript = rec.transcript
+            .map(t => t.source || t.vi || '')
+            .filter(s => s.trim())
+            .join(' ');
+
+        // Show typing indicator
+        const typingEl = this._appendQAMessage('ai', '...');
+        typingEl.classList.add('typing');
+
+        try {
+            const resp = await fetch('/api/qa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, transcript, topic: rec.customName || '' })
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                typingEl.classList.remove('typing');
+                typingEl.textContent = data.answer || 'No answer generated.';
+            } else {
+                typingEl.classList.remove('typing');
+                typingEl.textContent = 'Could not get an answer. Please try again.';
+            }
+        } catch (e) {
+            typingEl.classList.remove('typing');
+            typingEl.textContent = 'Connection error. Please try again.';
+        }
+    }
+
+    _appendQAMessage(role, text) {
+        const msg = document.createElement('div');
+        msg.className = `qa-message qa-${role}`;
+        msg.textContent = text;
+        this.qaChat?.appendChild(msg);
+        if (this.qaChat) this.qaChat.scrollTop = this.qaChat.scrollHeight;
+        return msg;
+    }
+
+    _escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 }
 
