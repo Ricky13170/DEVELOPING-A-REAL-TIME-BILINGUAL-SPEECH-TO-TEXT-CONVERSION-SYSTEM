@@ -222,6 +222,10 @@ class BARTphoCorrector:
         logger.info("BARTpho corrector ready")
 
     def _infer(self, text: str, max_length: int = 256) -> str:
+        in_words = len(text.split())
+        if in_words <= 3:
+            return text
+
         inputs = self.tokenizer(
             text,
             return_tensors="pt",
@@ -242,9 +246,20 @@ class BARTphoCorrector:
 
         corrected = self.tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
 
-        # Length safety check 
-        in_words = len(text.split())
-        out_words = len(corrected.split()) if corrected else 0
+        out_word_list = corrected.split()
+        if out_word_list:
+            from collections import Counter
+            word_counts = Counter(out_word_list)
+            most_common_count = word_counts.most_common(1)[0][1]
+            if most_common_count >= 3:
+                logger.warning(
+                    f"[BARTpho] Rejected: repetitive output '{corrected[:60]}'. "
+                    f"Keeping original: '{text[:60]}'"
+                )
+                return text
+
+        # reject too-short output
+        out_words = len(out_word_list)
 
         if in_words > 0 and out_words / in_words < _MIN_LENGTH_RATIO:
             logger.warning(
