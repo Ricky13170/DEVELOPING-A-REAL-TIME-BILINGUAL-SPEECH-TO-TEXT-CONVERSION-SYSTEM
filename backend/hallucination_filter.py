@@ -1,4 +1,5 @@
 import hashlib
+import difflib
 from collections import deque
 import logging
 
@@ -42,7 +43,8 @@ class HallucinationFilter:
         self, 
         text: str, 
         audio_rms: float,
-        confidence: float = 1.0
+        confidence: float = 1.0,
+        is_final: bool = True
     ) -> tuple[bool, str]:
         
         if not text or not text.strip():
@@ -68,9 +70,22 @@ class HallucinationFilter:
                 logger.debug(f"Forbidden substring detected: '{pattern}'")
                 return True, f"forbidden:{pattern}"
         
-        text_hash = self._hash_text(text)
-        if text_hash in self.recent_hashes:
-            logger.debug(f"Repeated hash detected: {text[:50]}...")
+        
+        matched = False
+        for recent_text in list(self.recent_texts)[-3:]:
+            similarity = difflib.SequenceMatcher(None, text_lower, recent_text.lower().strip()).ratio()
+
+            if len(text_lower) > 10:
+                if similarity > 0.85:
+                    logger.debug(f"Fuzzy repetition detected (ratio={similarity:.2f}): {text[:50]}...")
+                    matched = True
+                    break
+            else:
+                if similarity == 1.0:
+                    matched = True
+                    break
+                    
+        if matched:
             return True, "repetition"
         
         if confidence < 0.15:
@@ -83,8 +98,10 @@ class HallucinationFilter:
             return True, "repeated_word"
         
 
-        self.recent_hashes.append(text_hash)
-        self.recent_texts.append(text)
+        if is_final:
+            text_hash = self._hash_text(text)
+            self.recent_hashes.append(text_hash)
+            self.recent_texts.append(text)
         
         return False, "ok"
     
