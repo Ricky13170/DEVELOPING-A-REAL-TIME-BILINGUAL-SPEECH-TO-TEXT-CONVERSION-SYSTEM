@@ -38,27 +38,29 @@ class WhisperASR:
                 self.device,
                 compute_type=compute_type,
                 language=self.language,
-                asr_options={"without_timestamps": True},
+                asr_options={"without_timestamps": False, "word_timestamps": True},
                 vad_options={"vad_onset": 0.01, "vad_offset": 0.01},
             )
         
         logger.info("WhisperX loaded")
 
-    def transcribe(self, audio: np.ndarray, prompt: str = None) -> tuple:
+    def transcribe(self, audio: np.ndarray, prompt: str = None, temperature: float = None, condition_on_previous_text: bool = True) -> tuple:
         """Transcribe audio using WhisperX.
         
         Args:
             audio: float32 audio at 16kHz
             prompt: Context prompt (recent transcript history)
+            temperature: Sampling temperature (None = use default 0)
+            condition_on_previous_text: If True, provide the previous output to the model context.
             
         Returns:
-            (text, confidence) — same interface as before
+            (text, confidence, words)
         """
         if self.model is None:
             self.load_model()
         
         if len(audio) < 8000:
-            return "", 0.0
+            return "", 0.0, []
         
         normalized_audio, norm_stats = self.normalizer.normalize(audio)
 
@@ -66,11 +68,25 @@ class WhisperASR:
             normalized_audio = normalized_audio.astype(np.float32)
         
         original_options = None
-        if prompt and hasattr(self.model, 'options'):
-            original_options = self.model.options
-            self.model.options = dataclass_replace(
-                self.model.options, initial_prompt=prompt
-            )
+        if hasattr(self.model, 'options'):
+            overrides = {}
+            if prompt:
+                overrides['initial_prompt'] = prompt
+            if temperature is not None:
+                overrides['temperatures'] = [temperature]
+            if condition_on_previous_text is False:
+                overrides['condition_on_previous_text'] = False
+                
+            # Anti-hallucination parameters
+            overrides['repetition_penalty'] = 1.2
+            overrides['no_speech_threshold'] = 0.6
+            overrides['compression_ratio_threshold'] = 2.4
+                
+            if overrides:
+                original_options = self.model.options
+                self.model.options = dataclass_replace(
+                    self.model.options, **overrides
+                )
         
         try:
             # Transcribe with WhisperX (batch_size=1 for streaming segments)
@@ -80,24 +96,29 @@ class WhisperASR:
                 language=self.language,
             )
         finally:
-            # Restore original options (model is shared across sessions)
             if original_options is not None:
                 self.model.options = original_options
         
-        # Collect segments and calculate confidence
+        # Collect segments, calculate confidence, and collect words
         text_parts = []
+        words = []
         total_prob = 0.0
         seg_count = 0
         
         for segment in result.get("segments", []):
             text_parts.append(segment.get("text", "").strip())
+            
+            # Combine words from all segments
+            if "words" in segment:
+                words.extend(segment["words"])
+                
             if "avg_logprob" in segment:
                 total_prob += segment["avg_logprob"]
                 seg_count += 1
         
         text = " ".join(text_parts).strip()
         
-        # Calculate confidence
+        # confidence
         if seg_count > 0:
             avg_logprob = total_prob / seg_count
             conf = min(1.0, max(0.0, 1.0 + avg_logprob / 2))
@@ -106,7 +127,7 @@ class WhisperASR:
         else:
             conf = 0.0
         
-        return text, conf
+        return text, conf, words
 
 
 class StreamingASRProcessor:
@@ -127,17 +148,17 @@ class StreamingASRProcessor:
 
     def process_partial(self, prompt: str = None) -> tuple:
         if len(self.audio_buffer) < SAMPLE_RATE:
-            return "", 0.0
+            return "", 0.0, []
         
-        text, conf = self.asr.transcribe(self.audio_buffer, prompt)
-        return text, conf
+        text, conf, words = self.asr.transcribe(self.audio_buffer, prompt)
+        return text, conf, words
 
     def process_final(self, prompt: str = None) -> tuple:
         if len(self.audio_buffer) < 4000:
             self.audio_buffer = np.array([], dtype=np.float32)
-            return "", 0.0
+            return "", 0.0, []
         
-        text, conf = self.asr.transcribe(self.audio_buffer, prompt)
+        text, conf, words = self.asr.transcribe(self.audio_buffer, prompt)
         
         if text:
             self.context_history.append(text)
@@ -145,4 +166,4 @@ class StreamingASRProcessor:
                 self.context_history = self.context_history[-self.context_size:]
         
         self.audio_buffer = np.array([], dtype=np.float32)
-        return text, conf
+        return text, conf, words
