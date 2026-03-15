@@ -9,8 +9,7 @@ logger = logging.getLogger(__name__)
 
 class GroqService: 
     def __init__(self, api_key: Optional[str] = None, model: str = GROQ_MODEL):
-        # Read from os.environ at runtime (Modal injects secrets after import)
-        self.api_key = api_key or os.environ.get("GROQ_API_KEY", "") or GROQ_API_KEY
+        self.api_key = api_key or GROQ_API_KEY
         self.model = model
         self.client = None
         self.is_available = False
@@ -58,7 +57,7 @@ Return ONLY the keywords as a comma-separated list. No explanations."""
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, self._chat, prompt)
             
-            # Clean up: remove quotes, newlines, extra whitespace
+            # Clean up
             keywords = result.replace('"', '').replace('\n', ', ').strip()
             logger.info(f"[Groq] Keywords for '{topic[:30]}': {keywords[:100]}...")
             return keywords
