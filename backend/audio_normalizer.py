@@ -139,3 +139,49 @@ class AdaptiveNormalizer:
         stats["adaptive"] = self.noise_floor_updated
         
         return normalized, stats
+
+class DeepFilterNormalizer:
+    def __init__(self, sample_rate: int = 16000):
+        self.sample_rate = sample_rate
+        try:
+            from df.enhance import enhance, init_df
+            import torch
+            import os
+            # Prevent excessive threads by librosa/df on cpu
+            os.environ["OMP_NUM_THREADS"] = "1"
+            
+            # Load default model
+            self.model, self.df_state, _ = init_df()
+            self.enhance = enhance
+            self.torch = torch
+            self.is_available = True
+            logger.info("[Normalizer] DeepFilterNet initialized successfully via df.enhance")
+        except ImportError as e:
+            logger.error(f"[Normalizer] DeepFilterNet failed to import: {e}. Denoising will be skipped.")
+            self.is_available = False
+            
+    def normalize(self, audio: np.ndarray) -> tuple[np.ndarray, dict]:
+        if not self.is_available:
+            return audio, {"skipped": True, "reason": "DeepFilterNet not available"}
+            
+        if len(audio) < self.sample_rate * 0.1:  # too short
+            return audio, {"skipped": True, "reason": "Audio too short"}
+
+        try:
+            # DeepFilterNet expects tensor of shape [channels, time] and float32
+            audio_tensor = self.torch.from_numpy(audio).float().unsqueeze(0)
+            
+            enhanced_tensor = self.enhance(self.model, self.df_state, audio_tensor)
+            
+            # Convert back to numpy (squeeze to 1D)
+            enhanced_audio = enhanced_tensor.squeeze().cpu().numpy()
+            
+            stats = {
+                "denoised": True,
+                "duration": len(audio) / self.sample_rate
+            }
+            return enhanced_audio, stats
+            
+        except Exception as e:
+            logger.error(f"[Normalizer] DeepFilterNet enhancement failed: {e}")
+            return audio, {"skipped": True, "reason": str(e)}
