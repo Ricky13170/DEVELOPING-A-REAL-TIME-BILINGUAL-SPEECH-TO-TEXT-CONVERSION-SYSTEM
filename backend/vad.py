@@ -25,7 +25,6 @@ class VADManager:
         self._loaded = False
         
         # Rolling context buffer — Pyannote needs longer context for accuracy
-        # Keep ~2 seconds of audio for the model to work well
         self._context_samples = SAMPLE_RATE * 2  # 2 seconds
         self._context_buffer = np.array([], dtype=np.float32)
         
@@ -67,8 +66,10 @@ class VADManager:
         self._loaded = True
         logger.info("[VAD] Pyannote VAD ready (bundled model)")
     
-    def is_speech(self, audio: np.ndarray) -> bool:
+    def detect(self, audio: np.ndarray) -> tuple:
         """Check if audio chunk contains speech using Pyannote neural inference.
+        
+        Returns (is_speech: bool, speech_prob: float) — probability-aware detection.
         
         Maintains a 2-second rolling context buffer and runs the segmentation
         model on it. Uses the last few output frames (corresponding to the new
@@ -78,13 +79,13 @@ class VADManager:
             audio: float32 audio chunk at 16kHz (~250ms = 4000 samples)
             
         Returns:
-            True if speech detected
+            (is_speech, speech_prob) tuple
         """
         if not self._loaded:
             self.load()
         
         if len(audio) == 0:
-            return False
+            return False, 0.0
         
         # Build context: append new chunk, keep last 2 seconds
         self._context_buffer = np.concatenate([self._context_buffer, audio])
@@ -109,7 +110,16 @@ class VADManager:
         speech_prob = recent_probs.max(dim=-1).values.mean().item()
         self._last_prob = speech_prob
         
-        return speech_prob > self.threshold
+        return speech_prob > self.threshold, speech_prob
+
+    def is_speech(self, audio: np.ndarray) -> bool:
+        """Backward-compatible wrapper for detect()."""
+        is_speech, _ = self.detect(audio)
+        return is_speech
+    
+    def get_last_prob(self) -> float:
+        """Get the last computed speech probability."""
+        return self._last_prob
     
     def reset(self):
         """Reset VAD state (call at session start)"""
