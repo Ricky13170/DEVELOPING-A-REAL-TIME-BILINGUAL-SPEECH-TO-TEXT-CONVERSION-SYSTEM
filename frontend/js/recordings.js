@@ -812,7 +812,7 @@ class RecordingsManager {
             if (resp.ok) {
                 const data = await resp.json();
                 typingEl.classList.remove('typing');
-                typingEl.textContent = data.answer || 'No answer generated.';
+                typingEl.textContent = this._stripMarkdown(data.answer || 'No answer generated.');
             } else {
                 typingEl.classList.remove('typing');
                 typingEl.textContent = 'Could not get an answer. Please try again.';
@@ -830,6 +830,23 @@ class RecordingsManager {
         this.qaChat?.appendChild(msg);
         if (this.qaChat) this.qaChat.scrollTop = this.qaChat.scrollHeight;
         return msg;
+    }
+
+    _stripMarkdown(text) {
+        if (!text) return '';
+        let cleaned = String(text);
+        cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+        cleaned = cleaned.replace(/^\s{0,3}#{1,6}\s*/gm, '');
+        cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '$1');
+        cleaned = cleaned.replace(/__(.*?)__/g, '$1');
+        cleaned = cleaned.replace(/\*(.*?)\*/g, '$1');
+        cleaned = cleaned.replace(/_(.*?)_/g, '$1');
+        cleaned = cleaned.replace(/`([^`]*)`/g, '$1');
+        cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+        cleaned = cleaned.replace(/^[ \t]*[-*+][ \t]+/gm, '');
+        cleaned = cleaned.replace(/^[ \t]*>+[ \t]?/gm, '');
+        cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+        return cleaned.trim();
     }
 
     _escapeHtml(str) {

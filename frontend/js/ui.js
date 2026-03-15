@@ -473,14 +473,6 @@ class UIManager {
 
     setAudioSource(source) {
         this.currentSource = source;
-        // Show/hide screen share button based on source
-        if (this.el.screenShareBtn) {
-            if (source === 'computer' || source === 'screen') {
-                this.el.screenShareBtn.classList.remove('hidden');
-            } else {
-                this.el.screenShareBtn.classList.add('hidden');
-            }
-        }
         if (this.el.audioSourceText) {
             if (source === 'computer') {
                 this.el.audioSourceText.textContent = 'System Audio';

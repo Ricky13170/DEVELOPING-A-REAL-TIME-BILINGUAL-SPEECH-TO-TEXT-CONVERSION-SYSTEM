@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import time as _time
+import re
 from typing import Optional
 from backend.config import GROQ_API_KEY, GROQ_MODEL, GROQ_TIMEOUT
 logger = logging.getLogger(__name__)
@@ -158,6 +159,7 @@ Summary:"""
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, self._chat, prompt)
+            result = self._to_plain_text(result)
             logger.info(f"[Groq] Summary generated ({len(result)} chars)")
             return result
             
@@ -190,11 +192,31 @@ Answer concisely and accurately:"""
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, self._chat, prompt)
+            result = self._to_plain_text(result)
             logger.info(f"[Groq] Q&A answer generated ({len(result)} chars)")
             return result
         except Exception as e:
             logger.error(f"[Groq] answer_question error: {e}")
             return ""
+
+    @staticmethod
+    def _to_plain_text(text: str) -> str:
+        if not text:
+            return ""
+
+        cleaned = text
+        cleaned = re.sub(r"```[\s\S]*?```", "", cleaned)
+        cleaned = re.sub(r"^\s{0,3}#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned)
+        cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
+        cleaned = re.sub(r"\*(.*?)\*", r"\1", cleaned)
+        cleaned = re.sub(r"_(.*?)_", r"\1", cleaned)
+        cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
+        cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)
+        cleaned = re.sub(r"^[ \t]*[-*+][ \t]+", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^[ \t]*>+[ \t]?", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
     
     def _chat(self, prompt: str, max_retries: int = 2) -> str:
         """Synchronous Groq chat completion with retry on transient errors"""
@@ -208,27 +230,7 @@ Answer concisely and accurately:"""
                     model=self.model,
                     messages=[
                         {"role": "system", 
-                        "content": """
-                            You are a highly skilled Academic Assistant specializing in lecture comprehension and educational synthesis. 
-                            Your goal is to process lecture transcripts or notes and transform them into structured learning materials. 
-
-                            ### Instructions:
-                            1. **Core Analysis**: Identify the central thesis, key concepts, and supporting arguments.
-                            2. **Terminology**: Extract specialized vocabulary and provide concise, context-specific definitions.
-                            3. **Structured Summary**: Use a hierarchical format (Main Headings > Sub-points) to summarize the content.
-                            4. **Active Learning**: Generate 3-5 high-level reflection questions to test the user's deep understanding.
-
-                            ### Constraints:
-                            - Maintain an objective, formal, and scholarly tone.
-                            - If the input contains ambiguous points, highlight them for clarification.
-                            - Use Markdown for clear visual hierarchy (bolding key terms, using bullet points).
-
-                            ### Output Structure:
-                            - ## Executive Summary
-                            - ## Key Concepts & Definitions
-                            - ## Detailed Breakdown
-                            - ## Critical Thinking Questions
-                        """},
+                        "content": "You are a precise academic assistant. Follow the user's formatting instruction exactly. Return plain text unless the user explicitly asks for markdown."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0,
