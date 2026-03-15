@@ -23,42 +23,34 @@ image = (
         "torchaudio>=2.0.0",
         extra_options="--index-url https://download.pytorch.org/whl/cu124"
     )
+    # Transformers ecosystem
     .pip_install(
-        "ctranslate2>=4.5.0",
-        "whisperx",
-        "lightning",
-        "python-dotenv",
         "transformers>=4.35.0",
         "accelerate>=0.25.0",
         "sentencepiece>=0.1.99",
-        "safetensors>=0.4.0",
-        "protobuf>=3.20.0",
-        "peft>=0.7.0",
-        "groq>=0.4.0",
+    )
+    # WhisperX (includes faster-whisper + pyannote VAD)
+    .pip_install("whisperx")
+    # Web server
+    .pip_install(
         "fastapi>=0.104.0",
         "uvicorn>=0.24.0",
         "websockets>=12.0",
         "aiofiles>=23.0.0",
+    )
+
+    .pip_install(
         "numpy>=1.24.0",
         "scipy>=1.11.0",
         "soundfile>=0.12.0",
     )
-    .env({
-        "LD_LIBRARY_PATH": "/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:"
-                           "/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:"
-                           "/usr/local/lib/python3.11/site-packages/nvidia/cuda_runtime/lib",
-    })
-    .run_commands(
-        "pip uninstall -y torchcodec 2>/dev/null || true",
-        "python -c \""
-        "import torch, sys; "
-        "orig_load = torch.load; "
-        "torch.load = lambda *a, **k: orig_load(*a, **{**k, 'weights_only': False}); "
-        "sys.argv = ['upgrade', '--map-to-cpu', '/usr/local/lib/python3.11/site-packages/whisperx/assets/pytorch_model.bin']; "
-        "from lightning.pytorch.utilities.upgrade_checkpoint import main; "
-        "main()"
-        "\"",
-    )
+    # Utilities
+    .pip_install("safetensors>=0.4.0", "protobuf>=3.20.0")
+    # Post-processing (BARTpho syllable correction)
+    .pip_install("peft>=0.7.0")
+    # LLM (Groq API for context priming + summary)
+    .pip_install("groq>=0.4.0")
+    # Add project files
     .add_local_dir("backend", remote_path="/root/backend")
     .add_local_dir("frontend", remote_path="/root/frontend")
 )
@@ -73,7 +65,7 @@ cache = Volume.from_name("asr-model-cache", create_if_missing=True)
     scaledown_window=MODAL_CONTAINER_IDLE_TIMEOUT,
     image=image,
     volumes={"/cache": cache},
-    secrets=[Secret.from_dotenv()],
+    secrets=[Secret.from_name("groq-api-key")],
 )
 class ASR:
     @enter()
@@ -89,16 +81,6 @@ class ASR:
         
         sys.path.append("/root")
         os.environ["HF_HOME"] = "/cache/huggingface"
-        
-        # Propagate HF_TOKEN for HuggingFace model downloads
-        hf_token = os.environ.get("HF_TOKEN", "")
-        if hf_token:
-            os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
-        
-        # Debug: verify secrets are injected
-        has_groq = bool(os.environ.get("GROQ_API_KEY"))
-        has_hf = bool(hf_token)
-        print(f"[Container] Secrets: GROQ_API_KEY={'✓' if has_groq else '✗'} | HF_TOKEN={'✓' if has_hf else '✗'}")
         
         # Apply PyTorch patches for WhisperX/pyannote compatibility
         from backend.torch_patch import apply_torch_load_patch
@@ -137,7 +119,7 @@ class ASR:
             description="Real-time Vietnamese ASR with segment-based architecture"
         )
         
-        # Middleware
+        
         class NoCacheMiddleware(BaseHTTPMiddleware):
             """Prevent browser caching of frontend assets"""
             async def dispatch(self, request, call_next):
@@ -157,11 +139,16 @@ class ASR:
             allow_headers=["*"],
         )
 
+        # ============================
         # Server state
+        # ============================
+        
         start_time = time.time()
         conn_count = [0]  
 
+        # ============================
         # REST API Endpoints
+        # ============================
         
         @web_app.get("/api/status")
         async def status():
@@ -202,7 +189,96 @@ class ASR:
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
 
+        @web_app.post("/api/generate-context")
+        async def generate_context(request: Request):
+            """Generate keywords + context paragraph from topic using Groq LLM"""
+            try:
+                body = await request.json()
+                topic = body.get("topic", "").strip()
+                
+                if not topic:
+                    return JSONResponse({"error": "No topic provided"}, status_code=400)
+                
+                if not self.service.groq or not self.service.groq.is_available:
+                    return JSONResponse({"error": "Groq service not available"}, status_code=503)
+                
+                result = await self.service.groq.generate_context(topic)
+                return JSONResponse({**result, "topic": topic})
+                
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @web_app.post("/api/summarize")
+        async def summarize(request: Request):
+            """Summarize transcript text using Groq LLM"""
+            try:
+                body = await request.json()
+                text = body.get("text", "").strip()
+                topic = body.get("topic", "").strip()
+                language = body.get("language", "en").strip()
+
+                if not text:
+                    return JSONResponse({"error": "No text provided"}, status_code=400)
+
+                if not self.service.groq or not self.service.groq.is_available:
+                    return JSONResponse({"error": "Groq service not available"}, status_code=503)
+
+                summary_raw = await self.service.groq.summarize_lecture(text, topic, language=language)
+                return JSONResponse({"summary": summary_raw.strip(), "topic": topic})
+
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @web_app.post("/api/qa")
+        async def qa(request: Request):
+            """Answer questions about transcript using Groq LLM"""
+            try:
+                body = await request.json()
+                question = body.get("question", "").strip()
+                transcript = body.get("transcript", "").strip()
+                topic = body.get("topic", "").strip()
+
+                if not question or not transcript:
+                    return JSONResponse({"error": "Question and transcript required"}, status_code=400)
+
+                if not self.service.groq or not self.service.groq.is_available:
+                    return JSONResponse({"error": "Groq service not available"}, status_code=503)
+
+                answer = await self.service.groq.answer_question(transcript, question, topic)
+                return JSONResponse({"answer": answer})
+
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @web_app.post("/api/translate")
+        async def translate_text(request: Request):
+            """Translate text using NLLB model"""
+            try:
+                body = await request.json()
+                text = body.get("text", "").strip()
+                src_lang = body.get("src_lang", "eng_Latn").strip()
+                tgt_lang = body.get("tgt_lang", "vie_Latn").strip()
+
+                if not text:
+                    return JSONResponse({"error": "No text provided"}, status_code=400)
+
+                if not self.service.translator or not self.service.translator.is_loaded:
+                    return JSONResponse({"error": "Translation model not available"}, status_code=503)
+
+                import asyncio
+                loop = asyncio.get_event_loop()
+                translated = await loop.run_in_executor(
+                    None,
+                    lambda: self.service.translator.translate(text, src_lang=src_lang, tgt_lang=tgt_lang)
+                )
+                return JSONResponse({"translated": translated})
+
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        # ============================
         # WebSocket Endpoint
+        # ============================
         
         @web_app.websocket("/ws/transcribe")
         async def websocket_endpoint(websocket: WebSocket):
@@ -241,7 +317,6 @@ class ASR:
                 except Exception as e:
                     print(f"[WS #{cid}] Send error: {e}")
 
-            # Run both tasks concurrently
             try:
                 done, pending = await asyncio.wait(
                     [
@@ -251,7 +326,6 @@ class ASR:
                     return_when=asyncio.FIRST_COMPLETED
                 )
                 
-                # Cancel remaining tasks
                 for task in pending:
                     task.cancel()
                     
@@ -260,7 +334,10 @@ class ASR:
             finally:
                 print(f"[WS #{cid}] ✗ Closed")
 
+        # ============================
         # Static Files (Frontend)
+        # ============================
+        
         web_app.mount(
             "/", 
             StaticFiles(directory="/root/frontend", html=True), 
