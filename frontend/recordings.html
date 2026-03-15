@@ -25,13 +25,55 @@
           <h2 id="recordingTitle">Select a recording</h2>
           <div class="content-subtitle" id="recordingSubtitle"></div>
         </div>
-        <a href="./index.html" class="back-link">Back to Live</a>
+        <div class="content-actions">
+          <button class="btn-icon" id="summarizeBtn" title="Summarize">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </button>
+          <button class="btn-icon hidden" id="viewSummaryBtn" title="View Summary">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+          <a href="./index.html" class="back-link">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="19" y1="12" x2="5" y2="12"/>
+              <polyline points="12 19 5 12 12 5"/>
+            </svg>
+            Back to Live
+          </a>
+        </div>
       </div>
 
-      <div class="content-body" id="transcriptContent">
-        <div class="transcript-container-full">
-          <div class="empty-state">
-            <p>Select a recording from the sidebar</p>
+      <div class="content-body" id="contentBody">
+        <div class="content-body-main" id="transcriptContent">
+          <div class="transcript-container-full">
+            <div class="empty-state">
+              <p>Select a recording from the sidebar</p>
+            </div>
+          </div>
+        </div>
+        <div class="qa-resizer" id="qaResizer"></div>
+        <div class="qa-panel hidden" id="qaPanel">
+          <div class="qa-panel-header">
+            <h4>✦ Ask AI</h4>
+            <button class="modal-close" id="closeQaPanel" title="Close">×</button>
+          </div>
+          <div class="qa-chat" id="qaChat">
+            <div class="qa-welcome">
+              <div class="qa-welcome-icon">✦</div>
+              <p>Ask any question about the transcript content.</p>
+            </div>
+          </div>
+          <div class="qa-input-row">
+            <input type="text" id="qaInput" placeholder="Ask a question..." autocomplete="off">
+            <button class="btn btn-primary btn-sm" id="qaSendBtn">Send</button>
           </div>
         </div>
       </div>
@@ -73,6 +115,92 @@
       </div>
     </div>
   </div>
+
+  <!-- Tag Modal -->
+  <div class="modal-overlay" id="tagModal">
+    <div class="modal modal-tag">
+      <div class="modal-header">
+        <h3>Manage Tags</h3>
+        <button class="modal-close" id="tagModalClose" title="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Current tags</label>
+          <div class="tag-list-manage" id="tagListManage">
+            <div class="empty-tags-hint">No tags yet</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Add new tag</label>
+          <div class="tag-add-row">
+            <input type="text" id="tagInput" placeholder="Enter tag..." maxlength="20">
+            <button class="btn btn-primary btn-sm" id="tagModalSave">Add</button>
+          </div>
+        </div>
+        <div class="form-group form-group-flush">
+          <label>Suggestions</label>
+          <div class="tag-suggestions" id="tagSuggestions">
+            <button class="tag-chip" data-tag="important">⭐ important</button>
+            <button class="tag-chip" data-tag="lecture">🎓 lecture</button>
+            <button class="tag-chip" data-tag="meeting">📋 meeting</button>
+            <button class="tag-chip" data-tag="interview">💼 interview</button>
+            <button class="tag-chip" data-tag="review">🔍 review</button>
+            <button class="tag-chip" data-tag="draft">📝 draft</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="tagModalCancel">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary Modal -->
+  <div class="modal-overlay" id="summaryModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>Summary</h3>
+        <button class="modal-close" id="closeSummaryModal" title="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="summary-lang-row"> 
+          <label>Translate summary</label>
+          <select id="summaryLangSelect" class="summary-lang-select" title="Summary language">
+            <option value="en" data-nllb="eng_Latn">English (Original)</option>
+            <option value="zh" data-nllb="zho_Hans">Chinese</option>
+            <option value="vi" data-nllb="vie_Latn">Vietnamese</option>
+            <option value="ja" data-nllb="jpn_Jpan">Japanese</option>
+            <option value="ko" data-nllb="kor_Hang">Korean</option>
+            <option value="fr" data-nllb="fra_Latn">French</option>
+            <option value="de" data-nllb="deu_Latn">German</option>
+            <option value="es" data-nllb="spa_Latn">Spanish</option>
+            <option value="th" data-nllb="tha_Thai">Thai</option>
+            <option value="pt" data-nllb="por_Latn">Portuguese</option>
+            <option value="ru" data-nllb="rus_Cyrl">Russian</option>
+          </select>
+          <div class="summary-size-controls">
+            <button class="btn-icon btn-icon-sm" id="summaryFontInc" title="Increase font size">A+</button>
+            <button class="btn-icon btn-icon-sm" id="summaryFontDec" title="Decrease font size">A−</button>
+          </div>
+        </div>
+        <div id="summaryContent" class="summary-content"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="copySummaryBtn">Copy</button>
+        <button class="btn btn-accent" id="askAiBtn">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-item-icon">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Ask AI
+        </button>
+        <button class="btn btn-primary" id="closeSummaryBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notification" id="notification"></div>
 
   <script type="module" src="js/recordings.js"></script>
 </body>
