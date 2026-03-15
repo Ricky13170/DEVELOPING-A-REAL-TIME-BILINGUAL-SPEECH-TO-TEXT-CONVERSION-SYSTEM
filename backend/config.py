@@ -21,6 +21,10 @@ NLLB_SRC_LANG = "vie_Latn"
 NLLB_TGT_LANG = "eng_Latn"
 NLLB_DEVICE = "cuda"
 
+# Second-pass re-translation 
+RETRANSLATE_BATCH_SIZE = 3     
+RETRANSLATE_DELAY_SEC = 2.0      
+
 # Audio
 SAMPLE_RATE = 16000
 
@@ -31,10 +35,16 @@ VAD_MIN_NOISE = 0.001
 VAD_MAX_NOISE = 0.05       
 
 # Segmentation Configuration
-MAX_SEGMENT_SEC = 5.0       
-OVERLAP_SEC = 0.8           
+MAX_SEGMENT_SEC = 3.1       
+OVERLAP_SEC = 0.5           
 SILENCE_LIMIT = 0.5         
 MIN_DECODE_SEC = 1.0      
+OVERLAP_THRESHOLD_DIFF = 0.1  
+
+# Streaming tuning (prob-based emission)
+PROB_DROP_THRESHOLD = 0.4     
+CONTINUOUS_SPEECH_PARTIAL_SEC = 1.5  
+PRE_SPEECH_SEC = 0.3               
 
 # Local Agreement
 AGREEMENT_N = 2          
@@ -44,7 +54,7 @@ HALLUCINATION_HISTORY_SIZE = 5
 
 # BARTpho Post-processing
 import os
-ENABLE_BARTPHO = True  # Set False to skip BARTpho post-processing
+ENABLE_BARTPHO = False  
 BARTPHO_ADAPTER = "522H0134-NguyenNhatHuy/bartpho-syllable-correction"
 BARTPHO_DEVICE = "cuda"
 
