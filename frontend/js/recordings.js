@@ -20,6 +20,9 @@ class RecordingsManager {
         this.selectedId = null;
         this.recordings = [];
         this.menuOpenId = null;
+        this._originalSummary = null;
+        this._summaryLayoutBlocks = null;
+        this._currentSummaryBlocks = null;
     }
 
     init() {
@@ -369,6 +372,8 @@ class RecordingsManager {
 
         // Reset summary state for new recording
         this._originalSummary = null;
+        this._summaryLayoutBlocks = null;
+        this._currentSummaryBlocks = null;
         if (this.viewSummaryBtn) this.viewSummaryBtn.classList.add('hidden');
 
         this.renderTranscript(rec.transcript || []);
@@ -489,7 +494,8 @@ class RecordingsManager {
         this.viewSummaryBtn = document.getElementById('viewSummaryBtn');
         if (this.viewSummaryBtn) {
             this.viewSummaryBtn.onclick = () => {
-                if (this._originalSummary && this.summaryModal) {
+                if (this._currentSummaryBlocks && this.summaryModal) {
+                    this._renderSummaryBlocks(this._currentSummaryBlocks);
                     this.summaryModal.classList.add('active');
                 }
             };
@@ -570,9 +576,10 @@ class RecordingsManager {
             if (resp.ok) {
                 const data = await resp.json();
                 this._originalSummary = data.summary || 'No summary generated.';
+                this._summaryLayoutBlocks = this._buildSummaryBlocks(this._originalSummary);
                 // Reset dropdown to English
                 if (this.summaryLangSelect) this.summaryLangSelect.value = 'en';
-                this.showSummary(this._originalSummary);
+                this.showSummary(this._summaryLayoutBlocks);
                 if (this.viewSummaryBtn) this.viewSummaryBtn.classList.remove('hidden');
             } else {
                 this.showNotification('Could not generate summary');
@@ -586,10 +593,10 @@ class RecordingsManager {
 
     async _translateSummary() {
         const lang = this.summaryLangSelect?.value;
-        if (!lang || !this._originalSummary) return;
+        if (!lang || !this._summaryLayoutBlocks?.length) return;
 
         if (lang === 'en') {
-            this.showSummary(this._originalSummary);
+            this.showSummary(this._summaryLayoutBlocks);
             return;
         }
 
@@ -602,47 +609,87 @@ class RecordingsManager {
         }
 
         try {
-            const resp = await fetch('/api/translate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: this._originalSummary, src_lang: 'eng_Latn', tgt_lang: tgtNllb })
-            });
+            const translatedBlocks = await Promise.all(this._summaryLayoutBlocks.map(async (block) => {
+                if (!block?.text?.trim()) return { ...block };
 
-            if (!resp.ok) {
-                this.showNotification('Translation failed');
-                this.showSummary(this._originalSummary);
-                return;
-            }
+                const resp = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: block.text, src_lang: 'eng_Latn', tgt_lang: tgtNllb })
+                });
 
-            const data = await resp.json();
-            this.showSummary(data.translated || this._originalSummary);
+                if (!resp.ok) return { ...block };
+                const data = await resp.json();
+                const translated = (data.translated || '').trim();
+                return { ...block, text: translated || block.text };
+            }));
+
+            this.showSummary(translatedBlocks);
         } catch (e) {
             this.showNotification('Translation failed');
-            this.showSummary(this._originalSummary);
+            this.showSummary(this._summaryLayoutBlocks);
         }
     }
 
-    showSummary(text) {
-        if (!text || !this.summaryModal) return;
+    showSummary(summary) {
+        if (!summary || !this.summaryModal) return;
 
-        // Render plain text: each line → <p>, ALL-CAPS lines → section title
-        const lines = text.split('\n');
+        const blocks = Array.isArray(summary)
+            ? summary
+            : this._buildSummaryBlocks(summary);
+
+        this._renderSummaryBlocks(blocks);
+        this._currentSummaryBlocks = blocks;
+        this.summaryModal.classList.add('active');
+        this.showNotification('Summary ready!');
+    }
+
+    _buildSummaryBlocks(text) {
+        const lines = String(text || '').split('\n');
+        const blocks = [];
+
+        for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) continue;
+
+            const isUpperHeader = /^[A-Z][A-Z\s&\/]{2,}:?$/.test(line);
+            const isTitleCaseHeader = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,5}:?$/.test(line) && line.length <= 64;
+            const isHeader = isUpperHeader || isTitleCaseHeader;
+            blocks.push({
+                type: isHeader ? 'title' : 'line',
+                text: line.replace(/:$/, '')
+            });
+        }
+
+        return blocks;
+    }
+
+    _renderSummaryBlocks(blocks) {
+        if (!this.summaryContent) return;
+
         const htmlParts = [];
+        for (const block of blocks || []) {
+            if (!block?.text) continue;
 
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            // Detect section headers: ALL CAPS or ending with colon
-            if (/^[A-Z][A-Z\s&\/]{2,}:?$/.test(trimmed) || /^[\p{Lu}][\p{Lu}\s&\/]{2,}:?$/u.test(trimmed)) {
-                htmlParts.push(`<div class="summary-section-title">${this._escapeHtml(trimmed.replace(/:$/, ''))}</div>`);
+            if (block.type === 'title') {
+                htmlParts.push(`<div class="summary-section-title">${this._escapeHtml(block.text)}</div>`);
+                continue;
+            }
+
+            const numbered = block.text.match(/^(\d+[.)]\s+)(.+)$/);
+            if (numbered) {
+                htmlParts.push(`
+                    <p class="summary-line summary-line-numbered">
+                        <span class="summary-item-num">${this._escapeHtml(numbered[1].trim())}</span>
+                        <span>${this._escapeHtml(numbered[2])}</span>
+                    </p>
+                `);
             } else {
-                htmlParts.push(`<p>${this._escapeHtml(trimmed)}</p>`);
+                htmlParts.push(`<p class="summary-line">${this._escapeHtml(block.text)}</p>`);
             }
         }
 
-        if (this.summaryContent) this.summaryContent.innerHTML = htmlParts.join('');
-        this.summaryModal.classList.add('active');
-        this.showNotification('Summary ready!');
+        this.summaryContent.innerHTML = htmlParts.join('');
     }
 
     showNotification(msg) {
