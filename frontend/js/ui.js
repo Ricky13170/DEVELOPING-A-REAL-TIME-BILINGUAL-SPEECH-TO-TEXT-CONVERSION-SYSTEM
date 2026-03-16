@@ -85,6 +85,10 @@ class UIManager {
         if (this.el.screenVideoWrap) {
             this.subtitleOverlay = new SubtitleOverlay(this.el.screenVideoWrap);
         }
+
+        if (this.el.screenPreview) {
+            this.el.screenPreview.playsInline = true;
+        }
     }
 
     /* ═══════════ LANGUAGE SELECTORS ═══════════ */
@@ -482,6 +486,8 @@ class UIManager {
         if (this.el.audioSourceText) {
             if (source === 'computer') {
                 this.el.audioSourceText.textContent = 'System Audio';
+            } else if (source === 'mixed') {
+                this.el.audioSourceText.textContent = 'Mixed Audio';
             } else if (source === 'screen') {
                 this.el.audioSourceText.textContent = 'Screen';
             } else {

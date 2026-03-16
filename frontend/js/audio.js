@@ -53,6 +53,8 @@ class AudioManager {
         this.audioContext = null;
         this.mediaStream = null;
         this.sourceNode = null;
+        this.inputStreams = [];
+        this.sourceNodes = [];
         this.workletNode = null;
         this.sourceSampleRate = 48000;
         this.isRecording = false;
@@ -131,19 +133,22 @@ class AudioManager {
     }
 
 
-    async startScreenShare() {
+    async startScreenShare(options = {}) {
+        const { withAudio = true } = options;
         const stream = await navigator.mediaDevices.getDisplayMedia({
             video: true,
-            audio: {
-                echoCancellation: false,
-                noiseSuppression: false,
-                sampleRate: { ideal: 16000 }
-            }
+            audio: withAudio
+                ? {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    sampleRate: { ideal: 16000 }
+                }
+                : false
         });
 
         // Check if audio track exists
         const audioTracks = stream.getAudioTracks();
-        if (audioTracks.length === 0) {
+        if (withAudio && audioTracks.length === 0) {
             // No audio — still show video but warn
             console.warn('[Audio] Screen share has no audio track. Make sure to check "Share audio".');
         }
@@ -176,9 +181,27 @@ class AudioManager {
         console.log('[Audio] Screen share stopped');
     }
 
+    async getComputerAudioStream() {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                sampleRate: { ideal: 16000 }
+            }
+        });
+
+        displayStream.getVideoTracks().forEach(t => t.stop());
+        if (displayStream.getAudioTracks().length === 0) {
+            throw new Error('No audio — enable "Share audio"');
+        }
+
+        return displayStream;
+    }
+
     /**
      * Start recording from the given source.
-     * @param {'microphone' | 'computer' | 'screen'} source
+     * @param {'microphone' | 'computer' | 'screen' | 'mixed'} source
      */
     async startRecording(source = 'microphone') {
         await this.init();
@@ -186,6 +209,11 @@ class AudioManager {
         if (this.audioContext.state === 'suspended') {
             await this.audioContext.resume();
         }
+
+        this.inputStreams = [];
+        this.sourceNodes = [];
+        this.mediaStream = null;
+        this.sourceNode = null;
 
         try {
             if (source === 'screen') {
@@ -195,36 +223,28 @@ class AudioManager {
 
                 if (audioTracks.length > 0) {
                     // Create an audio-only stream from the screen share
-                    this.mediaStream = new MediaStream(audioTracks);
+                    this.inputStreams = [new MediaStream(audioTracks)];
                 } else {
                     // Fallback: also get mic audio if no screen audio
                     console.log('[Audio] No screen audio, falling back to mic');
-                    this.mediaStream = await this.getMicrophoneStream();
+                    this.inputStreams = [await this.getMicrophoneStream()];
                 }
             } else if (source === 'computer') {
-                // Pure computer audio (getDisplayMedia, no video preview)
-                const displayStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: true,
-                    audio: {
-                        echoCancellation: false,
-                        noiseSuppression: false,
-                        sampleRate: { ideal: 16000 }
-                    }
-                });
-                displayStream.getVideoTracks().forEach(t => t.stop());
-                if (displayStream.getAudioTracks().length === 0) {
-                    throw new Error('No audio — enable "Share audio"');
-                }
-                this.mediaStream = displayStream;
+                this.inputStreams = [await this.getComputerAudioStream()];
+            } else if (source === 'mixed') {
+                // Mix computer audio + microphone into the same processing node.
+                const [computerStream, micStream] = await Promise.all([
+                    this.getComputerAudioStream(),
+                    this.getMicrophoneStream()
+                ]);
+                this.inputStreams = [computerStream, micStream];
             } else {
-                this.mediaStream = await this.getMicrophoneStream();
+                this.inputStreams = [await this.getMicrophoneStream()];
             }
         } catch (err) {
             console.error('[Audio] Failed to get stream:', err);
             throw err;
         }
-
-        this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
 
         if (this.workletLoaded) {
             this.workletNode = new AudioWorkletNode(this.audioContext, 'recorder-worklet');
@@ -237,7 +257,13 @@ class AudioManager {
                 }
             };
 
-            this.sourceNode.connect(this.workletNode);
+            this.sourceNodes = this.inputStreams.map((stream) => this.audioContext.createMediaStreamSource(stream));
+            this.sourceNodes.forEach((node) => node.connect(this.workletNode));
+
+            // Keep legacy fields for compatibility with existing call sites.
+            this.mediaStream = this.inputStreams[0] || null;
+            this.sourceNode = this.sourceNodes[0] || null;
+
             this.workletNode.connect(this.audioContext.destination);
         } else {
             console.error('[Audio] Worklet not loaded, recording disabled');
@@ -300,15 +326,16 @@ class AudioManager {
             this.workletNode = null;
         }
 
-        if (this.sourceNode) {
-            this.sourceNode.disconnect();
-            this.sourceNode = null;
-        }
+        this.sourceNodes.forEach((node) => node.disconnect());
+        this.sourceNodes = [];
 
-        if (this.mediaStream) {
-            this.mediaStream.getTracks().forEach(t => t.stop());
-            this.mediaStream = null;
-        }
+        this.inputStreams.forEach((stream) => {
+            stream.getTracks().forEach((t) => t.stop());
+        });
+        this.inputStreams = [];
+
+        this.sourceNode = null;
+        this.mediaStream = null;
 
         if (this.isScreenSharing) {
             this.stopScreenShare();

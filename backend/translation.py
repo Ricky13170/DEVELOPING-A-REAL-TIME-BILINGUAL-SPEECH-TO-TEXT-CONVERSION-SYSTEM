@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+import threading
 import torch
 
 logger = logging.getLogger(__name__)
@@ -17,40 +18,55 @@ class NLLBTranslator:
         self.model = None
         self.tokenizer = None
         self.is_loaded = False
+        self._load_lock = threading.Lock()
 
     def load_model(self):
         if self.is_loaded:
             return
-        
-        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-        
-        logger.info(f"Loading NLLB: {self.model_name}")
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name,
-            cache_dir=self.cache_dir,
-            src_lang=self.src_lang
-        )
-        
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(
-            self.model_name,
-            cache_dir=self.cache_dir,
-            dtype=torch.float16,
-            device_map="auto",
-        )
-        
-        self.model.eval()
-        self.is_loaded = True
-        logger.info("NLLB loaded")
 
-    def translate(self, text: str, max_length: int = 256) -> str:
+        with self._load_lock:
+            if self.is_loaded:
+                return
+
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+            logger.info(f"Loading NLLB: {self.model_name}")
+
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name,
+                cache_dir=self.cache_dir,
+                src_lang=self.src_lang
+            )
+
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(
+                self.model_name,
+                cache_dir=self.cache_dir,
+                dtype=torch.float16,
+                device_map="auto",
+            )
+
+            self.model.eval()
+            self.is_loaded = True
+            logger.info("NLLB loaded")
+
+    def translate(
+        self,
+        text: str,
+        src_lang: Optional[str] = None,
+        tgt_lang: Optional[str] = None,
+        max_length: int = 256,
+    ) -> str:
         if not text or not text.strip():
             return ""
         
         if not self.is_loaded:
             self.load_model()
+
+        effective_src_lang = src_lang or self.src_lang
+        effective_tgt_lang = tgt_lang or self.tgt_lang
         
         try:
+            self.tokenizer.src_lang = effective_src_lang
             inputs = self.tokenizer(
                 text,
                 return_tensors="pt",
@@ -62,7 +78,7 @@ class NLLBTranslator:
             device = next(self.model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}
             
-            tgt_lang_id = self.tokenizer.convert_tokens_to_ids(self.tgt_lang)
+            tgt_lang_id = self.tokenizer.convert_tokens_to_ids(effective_tgt_lang)
             
             with torch.no_grad():
                 outputs = self.model.generate(

@@ -3,6 +3,8 @@ torch
 torchaudio
 faster-whisper
 ctranslate2
+whisperx
+pyannote-audio
 transformers
 accelerate
 sentencepiece

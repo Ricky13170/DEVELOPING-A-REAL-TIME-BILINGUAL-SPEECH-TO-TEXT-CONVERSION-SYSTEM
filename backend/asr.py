@@ -44,7 +44,14 @@ class WhisperASR:
         
         logger.info("WhisperX loaded")
 
-    def transcribe(self, audio: np.ndarray, prompt: str = None, temperature: float = None, condition_on_previous_text: bool = True) -> tuple:
+    def transcribe(
+        self,
+        audio: np.ndarray,
+        prompt: str = None,
+        temperature: float = None,
+        condition_on_previous_text: bool = True,
+        language: str = None,
+    ) -> tuple:
         """Transcribe audio using WhisperX.
         
         Args:
@@ -58,6 +65,8 @@ class WhisperASR:
         """
         if self.model is None:
             self.load_model()
+
+        effective_language = language or self.language
         
         if len(audio) < 8000:
             return "", 0.0, []
@@ -93,7 +102,7 @@ class WhisperASR:
             result = self.model.transcribe(
                 normalized_audio,
                 batch_size=1,
-                language=self.language,
+                language=effective_language,
             )
         finally:
             if original_options is not None:

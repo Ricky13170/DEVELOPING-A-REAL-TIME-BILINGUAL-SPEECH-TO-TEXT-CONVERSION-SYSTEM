@@ -369,7 +369,12 @@ class RecordingsManager {
 
         // Reset summary state for new recording
         this._originalSummary = null;
+        this._summaryLayoutBlocks = null;
+        this._currentSummaryBlocks = null;
+        if (this.summaryLangSelect) this.summaryLangSelect.value = 'en';
         if (this.viewSummaryBtn) this.viewSummaryBtn.classList.add('hidden');
+        this.summaryModal?.classList.remove('active');
+        this.closeQA();
 
         this.renderTranscript(rec.transcript || []);
     }
@@ -483,7 +488,8 @@ class RecordingsManager {
         this.viewSummaryBtn = document.getElementById('viewSummaryBtn');
         if (this.viewSummaryBtn) {
             this.viewSummaryBtn.onclick = () => {
-                if (this._originalSummary && this.summaryModal) {
+                if (this._currentSummaryBlocks && this.summaryModal) {
+                    this._renderSummaryBlocks(this._currentSummaryBlocks);
                     this.summaryModal.classList.add('active');
                 }
             };
@@ -524,13 +530,15 @@ class RecordingsManager {
         this._summaryFontSize = parseFloat(localStorage.getItem('summaryFontSize') || '0.95');
         const fontDec = document.getElementById('summaryFontDec');
         const fontInc = document.getElementById('summaryFontInc');
-        const applySize = () => {
-            if (this.summaryContent) this.summaryContent.style.fontSize = `${this._summaryFontSize}rem`;
-            localStorage.setItem('summaryFontSize', String(this._summaryFontSize));
+        this._applySummaryFontSize();
+        if (fontDec) fontDec.onclick = () => {
+            this._summaryFontSize = Math.max(0.7, this._summaryFontSize - 0.05);
+            this._applySummaryFontSize();
         };
-        applySize();
-        if (fontDec) fontDec.onclick = () => { this._summaryFontSize = Math.max(0.7, this._summaryFontSize - 0.05); applySize(); };
-        if (fontInc) fontInc.onclick = () => { this._summaryFontSize = Math.min(1.6, this._summaryFontSize + 0.05); applySize(); };
+        if (fontInc) fontInc.onclick = () => {
+            this._summaryFontSize = Math.min(1.6, this._summaryFontSize + 0.05);
+            this._applySummaryFontSize();
+        };
     }
 
     async summarizeSelected() {
@@ -563,8 +571,9 @@ class RecordingsManager {
             if (resp.ok) {
                 const data = await resp.json();
                 this._originalSummary = data.summary || 'No summary generated.';
+                this._summaryLayoutBlocks = this._buildSummaryBlocks(this._originalSummary);
                 if (this.summaryLangSelect) this.summaryLangSelect.value = 'en';
-                this.showSummary(this._originalSummary);
+                this.showSummary(this._summaryLayoutBlocks);
                 if (this.viewSummaryBtn) this.viewSummaryBtn.classList.remove('hidden');
             } else {
                 this.showNotification('Could not generate summary');
@@ -578,10 +587,10 @@ class RecordingsManager {
 
     async _translateSummary() {
         const lang = this.summaryLangSelect?.value;
-        if (!lang || !this._originalSummary) return;
+        if (!lang || !this._summaryLayoutBlocks?.length) return;
 
         if (lang === 'en') {
-            this.showSummary(this._originalSummary);
+            this.showSummary(this._summaryLayoutBlocks);
             return;
         }
 
@@ -591,49 +600,135 @@ class RecordingsManager {
 
         if (this.summaryContent) {
             this.summaryContent.innerHTML = '<div class="summary-loading">Translating...</div>';
+            this._applySummaryFontSize();
         }
 
         try {
-            const resp = await fetch('/api/translate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: this._originalSummary, src_lang: 'eng_Latn', tgt_lang: tgtNllb })
-            });
+            const translatedBlocks = await Promise.all(this._summaryLayoutBlocks.map(async (block) => {
+                if (!block?.text?.trim()) return { ...block };
 
-            if (!resp.ok) {
-                this.showNotification('Translation failed');
-                this.showSummary(this._originalSummary);
-                return;
-            }
+                const resp = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: block.text, src_lang: 'eng_Latn', tgt_lang: tgtNllb })
+                });
 
-            const data = await resp.json();
-            this.showSummary(data.translated || this._originalSummary);
+                if (!resp.ok) return { ...block };
+
+                const data = await resp.json();
+                const translated = (data.translated || '').trim();
+                return { ...block, text: translated || block.text };
+            }));
+
+            this.showSummary(translatedBlocks);
         } catch (e) {
             this.showNotification('Translation failed');
-            this.showSummary(this._originalSummary);
+            this.showSummary(this._summaryLayoutBlocks);
         }
     }
 
-    showSummary(text) {
-        if (!text || !this.summaryModal) return;
+    showSummary(summary) {
+        if (!summary || !this.summaryModal) return;
 
-        const lines = text.split('\n');
+        const blocks = Array.isArray(summary)
+            ? summary
+            : this._buildSummaryBlocks(summary);
+
+        this._renderSummaryBlocks(blocks);
+        this._currentSummaryBlocks = blocks;
+        this.summaryModal.classList.add('active');
+        this.showNotification('Summary ready!');
+    }
+
+    _buildSummaryBlocks(text) {
+        const lines = String(text || '').split('\n');
+        const blocks = [];
+
+        for (const rawLine of lines) {
+            const normalized = this._normalizeSummaryLine(rawLine);
+            if (!normalized) continue;
+
+            const { text: line, isBullet } = normalized;
+            const isUpperHeader = /^[A-Z][A-Z\s&\/]{2,}:?$/.test(line);
+            const isTitleCaseHeader = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,5}:?$/.test(line) && line.length <= 64;
+            const isHeader = isUpperHeader || isTitleCaseHeader;
+
+            blocks.push({
+                type: isHeader ? 'title' : (isBullet ? 'bullet' : 'line'),
+                text: line.replace(/:$/, '')
+            });
+        }
+
+        return blocks;
+    }
+
+    _normalizeSummaryLine(rawLine) {
+        let line = String(rawLine || '').trim();
+        if (!line) return null;
+
+        line = line.replace(/^#{1,6}\s*/, '');
+        line = line.replace(/\*\*(.*?)\*\*/g, '$1');
+        line = line.replace(/__(.*?)__/g, '$1');
+        line = line.replace(/`([^`]+)`/g, '$1');
+
+        const bulletMatch = line.match(/^[-*•]\s+(.+)$/);
+        if (bulletMatch) {
+            return {
+                text: bulletMatch[1].trim(),
+                isBullet: true,
+            };
+        }
+
+        return {
+            text: line.trim(),
+            isBullet: false,
+        };
+    }
+
+    _renderSummaryBlocks(blocks) {
+        if (!this.summaryContent) return;
+
         const htmlParts = [];
+        for (const block of blocks || []) {
+            if (!block?.text) continue;
 
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
+            if (block.type === 'title') {
+                htmlParts.push(`<div class="summary-section-title">${this._escapeHtml(block.text)}</div>`);
+                continue;
+            }
 
-            if (/^[A-Z][A-Z\s&\/]{2,}:?$/.test(trimmed) || /^[\p{Lu}][\p{Lu}\s&\/]{2,}:?$/u.test(trimmed)) {
-                htmlParts.push(`<div class="summary-section-title">${this._escapeHtml(trimmed.replace(/:$/, ''))}</div>`);
+            if (block.type === 'bullet') {
+                htmlParts.push(`
+                    <p class="summary-line summary-line-bullet">
+                        <span class="summary-bullet-dot">•</span>
+                        <span>${this._escapeHtml(block.text)}</span>
+                    </p>
+                `);
+                continue;
+            }
+
+            const numbered = block.text.match(/^(\d+[.)]\s+)(.+)$/);
+            if (numbered) {
+                htmlParts.push(`
+                    <p class="summary-line summary-line-numbered">
+                        <span class="summary-item-num">${this._escapeHtml(numbered[1].trim())}</span>
+                        <span>${this._escapeHtml(numbered[2])}</span>
+                    </p>
+                `);
             } else {
-                htmlParts.push(`<p>${this._escapeHtml(trimmed)}</p>`);
+                htmlParts.push(`<p class="summary-line">${this._escapeHtml(block.text)}</p>`);
             }
         }
 
-        if (this.summaryContent) this.summaryContent.innerHTML = htmlParts.join('');
-        this.summaryModal.classList.add('active');
-        this.showNotification('Summary ready!');
+        this.summaryContent.innerHTML = htmlParts.join('');
+        this._applySummaryFontSize();
+    }
+
+    _applySummaryFontSize() {
+        if (this.summaryContent) {
+            this.summaryContent.style.fontSize = `${this._summaryFontSize}rem`;
+        }
+        localStorage.setItem('summaryFontSize', String(this._summaryFontSize));
     }
 
     showNotification(msg) {
@@ -735,9 +830,13 @@ class RecordingsManager {
         this.qaInput.value = '';
 
         const transcript = rec.transcript
-            .map(t => t.source || t.vi || '')
+            .map(t => {
+                const source = t.source || t.vi || '';
+                const target = t.target || t.en || '';
+                return [source, target].filter(Boolean).join('\n');
+            })
             .filter(s => s.trim())
-            .join(' ');
+            .join('\n\n');
 
         // Show typing indicator
         const typingEl = this._appendQAMessage('ai', '...');

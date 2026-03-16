@@ -192,6 +192,8 @@ class ASRApp {
           });
         } else if (source === "computer") {
           this.uiMgr.setAudioSource("computer");
+        } else if (source === "mixed") {
+          this.uiMgr.setAudioSource("mixed");
         }
 
         audioDropdown.classList.remove("active");
@@ -211,19 +213,26 @@ class ASRApp {
 
     // Audio manager callbacks for screen share
     this.audioMgr.onScreenStream = (stream) => {
+      const currentSource = this.uiMgr.getAudioSource();
       this.uiMgr.showScreenPanel(stream);
-      this.uiMgr.setAudioSource("screen");
+      if (currentSource !== "computer" && currentSource !== "mixed") {
+        this.uiMgr.setAudioSource("screen");
+      }
     };
 
     this.audioMgr.onScreenStop = () => {
+      const currentSource = this.uiMgr.getAudioSource();
       this.uiMgr.hideScreenPanel();
-      this.uiMgr.setAudioSource("microphone");
+      if (currentSource === "screen") {
+        this.uiMgr.setAudioSource("microphone");
+      }
     };
   }
 
   async _startScreenShare() {
     try {
-      await this.audioMgr.startScreenShare();
+      const currentSource = this.uiMgr.getAudioSource();
+      await this.audioMgr.startScreenShare({ withAudio: currentSource !== "computer" && currentSource !== "mixed" });
     } catch (err) {
       console.error("[ScreenShare] Error:", err);
       this.uiMgr.showNotification(err.message || "Could not share screen");
@@ -255,11 +264,7 @@ class ASRApp {
 
       // Determine audio source
       let source = this.uiMgr.getAudioSource();
-      if (this.audioMgr.isScreenSharing) {
-        source = "screen";
-      }
-      // Computer audio → use screen share flow for subtitles
-      if (source === "computer") {
+      if (this.audioMgr.isScreenSharing && source !== "computer" && source !== "mixed") {
         source = "screen";
       }
       await this.audioMgr.startRecording(source);

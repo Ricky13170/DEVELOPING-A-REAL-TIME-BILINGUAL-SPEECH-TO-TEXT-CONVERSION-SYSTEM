@@ -117,6 +117,9 @@ class ASRSession:
         
         # Language config
         self.do_translate = True
+        self.src_whisper_lang = getattr(self.service.asr, "language", "vi")
+        self.src_nllb_lang = getattr(self.service.translator, "src_lang", "vie_Latn")
+        self.tgt_nllb_lang = getattr(self.service.translator, "tgt_lang", "eng_Latn")
         
         # Second-pass re-translation buffer
         self._retranslate_buffer = []   
@@ -130,6 +133,22 @@ class ASRSession:
         self.transcript_history = [] 
         
         print("[Session] Initialized with segment-based architecture")
+
+    def _apply_language_settings(self, data: dict):
+        """Apply runtime language choices from the client without resetting shared models."""
+        src_whisper = data.get("srcLang")
+        src_nllb = data.get("srcNllb")
+        tgt_nllb = data.get("tgtNllb")
+
+        if src_whisper:
+            self.src_whisper_lang = src_whisper
+        if src_nllb:
+            self.src_nllb_lang = src_nllb
+        if tgt_nllb:
+            self.tgt_nllb_lang = tgt_nllb
+
+        if "translate" in data:
+            self.do_translate = bool(data.get("translate"))
 
     async def handle_incoming(self, message: str):
         """Route incoming WebSocket messages"""
@@ -195,11 +214,12 @@ class ASRSession:
 
     async def _handle_lang_change(self, data):
         """Handle mid-session language change from client"""
-        src_whisper = data.get("srcLang")
-        tgt_nllb = data.get("tgtNllb")
-        src_nllb = data.get("srcNllb")
+        self._apply_language_settings(data)
         
-        print(f"[Session] Language changed requested: {src_whisper or 'auto'} → {tgt_nllb}")
+        print(
+            f"[Session] Language changed: {self.src_whisper_lang or 'default'} | "
+            f"{self.src_nllb_lang} → {self.tgt_nllb_lang}"
+        )
         await self.out_queue.put(json.dumps({
             "type": "log", "level": "info",
             "message": f"Language switched in UI."
@@ -218,6 +238,7 @@ class ASRSession:
         print("[Session] START")
         
         self.topic = self._sanitize_topic(data.get("topic", ""))
+        self._apply_language_settings(data)
         self.is_recording = True
         self.session_start = datetime.now()
         self.segment_id = 0
@@ -228,9 +249,6 @@ class ASRSession:
         self.prev_final_segment_id = None
         self.prev_final_words = []
         self.prev_final_duration = 0.0
-        
-        do_translate = data.get("translate", True)
-        self.do_translate = do_translate
         
         # Reset all components
         self.vad.reset()
@@ -366,7 +384,10 @@ class ASRSession:
             None,
             self.service.asr.transcribe,
             audio,
-            prompt 
+            prompt,
+            None,
+            True,
+            self.src_whisper_lang,
         )
         
         inference_ms = int((time.time() - start) * 1000)
@@ -404,7 +425,8 @@ class ASRSession:
                     audio,
                     None,   
                     temp,    
-                    False   
+                    False,
+                    self.src_whisper_lang,
                 )
                 
                 retry_ms = int((time.time() - retry_start) * 1000)
@@ -439,7 +461,8 @@ class ASRSession:
                         audio,
                         keyword_prompt,  
                         0.6,            
-                        False          
+                        False,
+                        self.src_whisper_lang,
                     )
                     
                     retry_ms = int((time.time() - retry_start) * 1000)
@@ -541,7 +564,9 @@ class ASRSession:
             translated = await loop.run_in_executor(
                 None,
                 self.service.translator.translate,
-                text
+                text,
+                self.src_nllb_lang,
+                self.tgt_nllb_lang,
             )
             duration = time.time() - start
             
@@ -601,7 +626,9 @@ class ASRSession:
             translated_combined = await loop.run_in_executor(
                 None,
                 self.service.translator.translate,
-                combined
+                combined,
+                self.src_nllb_lang,
+                self.tgt_nllb_lang,
             )
             duration = time.time() - start
             
@@ -752,6 +779,16 @@ class ASRSession:
         self.pending_partial_text = None
         self.pending_partial_time = None
         self.agreement.reset()
+
+    async def close(self):
+        """Release session-level async work on disconnect."""
+        self.is_recording = False
+        if self._retranslate_task and not self._retranslate_task.done():
+            self._retranslate_task.cancel()
+            try:
+                await self._retranslate_task
+            except asyncio.CancelledError:
+                pass
 
     async def _trim_overlap_by_threshold(self, current_text: str, current_words: list, current_duration: float) -> str:
         """Trim overlap by comparing word-level confidence and text similarity in the shared 0.5s window.
@@ -953,7 +990,10 @@ class ASRSession:
                 None,
                 self.service.asr.transcribe,
                 audio,
-                prompt
+                prompt,
+                None,
+                True,
+                self.src_whisper_lang,
             )
             
             if text and len(text) > 10: 

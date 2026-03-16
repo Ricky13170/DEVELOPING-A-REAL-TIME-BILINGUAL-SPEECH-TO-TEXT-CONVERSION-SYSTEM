@@ -1710,6 +1710,30 @@ body {
     display: inline-block;
 }
 
+.summary-line {
+    margin: 0.45rem 0;
+    line-height: 1.7;
+    color: var(--text);
+}
+
+.summary-line-numbered {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+}
+
+.summary-line-bullet {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+}
+
+.summary-bullet-dot {
+    color: var(--primary);
+    font-weight: 700;
+    line-height: 1.7;
+}
+
 /* ===========================================
    Export Dropdown Fix — opens upward
    =========================================== */

@@ -317,21 +317,26 @@ class ASR:
                 except Exception as e:
                     print(f"[WS #{cid}] Send error: {e}")
 
+            recv_task = asyncio.create_task(recv())
+            send_task = asyncio.create_task(send())
+
             try:
                 done, pending = await asyncio.wait(
-                    [
-                        asyncio.create_task(recv()),
-                        asyncio.create_task(send())
-                    ],
+                    [recv_task, send_task],
                     return_when=asyncio.FIRST_COMPLETED
                 )
-                
+
                 for task in pending:
                     task.cancel()
-                    
+
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+
+                await asyncio.gather(*done, return_exceptions=True)
             except Exception as e:
                 print(f"[WS #{cid}] Error: {e}")
             finally:
+                await session.close()
                 print(f"[WS #{cid}] ✗ Closed")
 
         # ============================
