@@ -66,6 +66,45 @@ body {
     margin: 0;
 }
 
+.transport-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-gray);
+    color: var(--text-light);
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.transport-badge::before {
+    content: '';
+    width: 0.42rem;
+    height: 0.42rem;
+    margin-right: 0.35rem;
+    border-radius: 50%;
+    background: #94a3b8;
+}
+
+.transport-badge[data-state="ready"]::before,
+.transport-badge[data-state="ws"]::before,
+.transport-badge[data-state="webrtc"]::before {
+    background: var(--success);
+}
+
+.transport-badge[data-state="webrtc"] {
+    border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+    color: var(--success);
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
 .dropdown {
     position: relative;
 }

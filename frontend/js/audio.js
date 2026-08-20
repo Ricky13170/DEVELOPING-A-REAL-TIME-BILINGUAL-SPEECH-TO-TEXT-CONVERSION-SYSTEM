@@ -56,6 +56,8 @@ class AudioManager {
         this.inputStreams = [];
         this.sourceNodes = [];
         this.workletNode = null;
+        this.processedStreamDestination = null;
+        this.silentGainNode = null;
         this.sourceSampleRate = 48000;
         this.isRecording = false;
         this.onAudioData = null;
@@ -71,7 +73,11 @@ class AudioManager {
         this.screenStream = null;
         this.isScreenSharing = false;
         this.onScreenStream = null;  
-        this.onScreenStop = null;     
+        this.onScreenStop = null;
+
+        // WebRTC: when true, audio is sent via WebRTC media track
+        // and base64/WebSocket sending is skipped
+        this._useWebRTC = false;
     }
 
     async init() {
@@ -251,9 +257,11 @@ class AudioManager {
 
             this.workletNode.port.onmessage = (event) => {
                 if (!this.isRecording) return;
-                const { command, inputBuffer } = event.data;
+                const { command, inputBuffer, rms } = event.data;
                 if (command === 'process') {
-                    this.processAudioChunk(inputBuffer);
+                    this.processAudioChunk(inputBuffer, rms);
+                } else if (command === 'level' && this.onLevelUpdate) {
+                    this.onLevelUpdate(rms);
                 }
             };
 
@@ -264,7 +272,16 @@ class AudioManager {
             this.mediaStream = this.inputStreams[0] || null;
             this.sourceNode = this.sourceNodes[0] || null;
 
-            this.workletNode.connect(this.audioContext.destination);
+            // Capture the exact Web Audio mix (including mixed mic + computer)
+            // as a MediaStream that can be attached to WebRTC.
+            this.processedStreamDestination = this.audioContext.createMediaStreamDestination();
+            this.workletNode.connect(this.processedStreamDestination);
+
+            // Keep the graph alive without playing captured audio to speakers.
+            this.silentGainNode = this.audioContext.createGain();
+            this.silentGainNode.gain.value = 0;
+            this.workletNode.connect(this.silentGainNode);
+            this.silentGainNode.connect(this.audioContext.destination);
         } else {
             console.error('[Audio] Worklet not loaded, recording disabled');
             return;
@@ -278,30 +295,37 @@ class AudioManager {
         console.log('[Audio] Recording started (' + source + '), resampling', this.sourceSampleRate, '->', SAMPLE_RATE);
     }
 
-    processAudioChunk(inputData) {
+    processAudioChunk(inputData, measuredRms = null) {
         if (!this.isRecording) return;
 
-        const rms = calculateRMS(inputData);
+        const rms = measuredRms ?? calculateRMS(inputData);
         if (this.onLevelUpdate) {
             this.onLevelUpdate(rms);
         }
 
-        const resampled = linearResample(inputData, this.sourceSampleRate, SAMPLE_RATE);
-        this.pendingChunks.push(resampled);
-        this.pendingLength += resampled.length;
+        if (this.useWebRTC) return;
+
+        // Accumulate native-rate frames and resample the complete 250 ms block.
+        // Resampling each 128-sample worklet frame causes rounding drift.
+        this.pendingChunks.push(inputData);
+        this.pendingLength += inputData.length;
     }
 
     flushBuffer() {
         if (!this.isRecording || this.pendingLength === 0) return;
 
-        const float32 = new Float32Array(this.pendingLength);
+        const nativeAudio = new Float32Array(this.pendingLength);
         let offset = 0;
         for (const chunk of this.pendingChunks) {
-            float32.set(chunk, offset);
+            nativeAudio.set(chunk, offset);
             offset += chunk.length;
         }
         this.pendingChunks = [];
         this.pendingLength = 0;
+
+        if (this.useWebRTC) return;
+
+        const float32 = linearResample(nativeAudio, this.sourceSampleRate, SAMPLE_RATE);
 
         const int16 = float32ToInt16(float32);
         const base64 = int16ToBase64(int16);
@@ -312,19 +336,25 @@ class AudioManager {
     }
 
     stopRecording() {
-        this.isRecording = false;
-
         if (this.sendInterval) {
             clearInterval(this.sendInterval);
             this.sendInterval = null;
         }
 
+        // Flush the last WebSocket block while recording is still marked active.
         this.flushBuffer();
+        this.isRecording = false;
 
         if (this.workletNode) {
             this.workletNode.disconnect();
             this.workletNode = null;
         }
+
+        if (this.silentGainNode) {
+            this.silentGainNode.disconnect();
+            this.silentGainNode = null;
+        }
+        this.processedStreamDestination = null;
 
         this.sourceNodes.forEach((node) => node.disconnect());
         this.sourceNodes = [];
@@ -342,6 +372,31 @@ class AudioManager {
         }
 
         console.log('[Audio] Recording stopped');
+    }
+
+    set useWebRTC(enabled) {
+        this._useWebRTC = Boolean(enabled);
+        this.workletNode?.port.postMessage({
+            command: 'set-webrtc',
+            enabled: this._useWebRTC,
+        });
+    }
+
+    get useWebRTC() {
+        return this._useWebRTC;
+    }
+    /**
+     * Get the active audio MediaStream (for WebRTC transport).
+     * @returns {MediaStream|null}
+     */
+    getActiveStream() {
+        if (this.processedStreamDestination?.stream?.getAudioTracks().length) {
+            return this.processedStreamDestination.stream;
+        }
+        if (this.inputStreams.length > 0) {
+            return this.inputStreams[0];
+        }
+        return this.mediaStream;
     }
 }
 

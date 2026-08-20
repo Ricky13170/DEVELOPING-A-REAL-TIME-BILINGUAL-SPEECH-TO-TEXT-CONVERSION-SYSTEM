@@ -1,31 +1,46 @@
 [project]
 name = "real-time-bilingual-speech-to-text"
 version = "0.1.0"
-description = "Real-Time Speech to text Vietnam English Lecture hall"
+description = "Lightweight real-time Vietnamese-English speech transcription and translation"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
-	"torch",
-	"torchaudio",
-	"faster-whisper",
-	"ctranslate2",
-	"whisperx",
-	"pyannote-audio",
-	"transformers",
-	"accelerate",
-	"sentencepiece",
-	"safetensors",
-	"protobuf",
-	"peft",
-	"groq",
-	"numpy",
-	"scipy",
-	"soundfile",
-	"modal",
-	"fastapi",
-	"uvicorn",
-	"websockets",
-	"aiofiles",
-	"python-multipart",
-	"python-dotenv",
+    "torch==2.8.0",
+    "faster-whisper>=1.2.1,<1.3",
+    "ctranslate2>=4.5,<5",
+    "transformers>=4.48,<4.58",
+    "sentencepiece>=0.2,<0.3",
+    "sacremoses>=0.1,<1",
+    "safetensors>=0.4,<1",
+    "protobuf>=5,<7",
+    "av>=14,<18",
+    "numpy>=2.1,<3",
+    "scipy>=1.14,<2",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "websockets>=13,<17",
+    "python-dotenv>=1,<2",
+]
+
+[project.optional-dependencies]
+webrtc = [
+    "aiortc>=1.14,<1.16",
+]
+groq = [
+    "groq>=1,<2",
+]
+
+# The repository is an application, not a distributable Python package.
+[tool.uv]
+package = false
+
+# The application is deliberately CPU-only on Windows and Linux.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
 ]

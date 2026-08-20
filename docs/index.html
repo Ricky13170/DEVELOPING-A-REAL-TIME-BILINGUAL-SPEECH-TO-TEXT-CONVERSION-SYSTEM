@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TheDuo Edge — Offline Bilingual Speech Translation</title>
+    <meta name="description" content="Offline-first Vietnamese-English speech transcription and translation for frontline teams.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- NAV -->
+    <nav class="nav" id="nav">
+        <div class="nav-inner">
+            <a href="#" class="nav-logo">
+                <span class="logo-icon">🎙️</span>
+                <span class="logo-text">TheDuo<span class="logo-ai"> Edge</span></span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#architecture">Architecture</a>
+                <a href="#benchmarks">Benchmarks</a>
+                <a href="#demo">Demo</a>
+                <a href="https://github.com/Ricky13170/DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM" class="nav-cta" target="_blank">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    GitHub
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero" id="hero">
+        <div class="hero-bg">
+            <div class="hero-glow hero-glow-1"></div>
+            <div class="hero-glow hero-glow-2"></div>
+            <div class="hero-grid"></div>
+        </div>
+        <div class="hero-content">
+            <div class="hero-badge">🎙️ OneVoice AI Challenge — Technical Prototype</div>
+            <h1 class="hero-title">
+                Real-Time <span class="gradient-text">Bilingual</span><br>
+                Speech Translation
+            </h1>
+            <p class="hero-subtitle">
+                Offline-first Vietnamese ↔ English speech translation for frontline teams.<br>
+                Lightweight ASR, deterministic audio gating, and local NMT with measured-stage telemetry.
+            </p>
+            <div class="hero-actions">
+                <a href="#demo" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Watch Demo
+                </a>
+                <a href="https://github.com/Ricky13170/DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM" class="btn btn-ghost" target="_blank">
+                    View Source →
+                </a>
+            </div>
+            <div class="hero-stats">
+                <div class="stat"><span class="stat-value">&lt;2s</span><span class="stat-label">Engineering Target</span></div>
+                <div class="stat-divider"></div>
+                <div class="stat"><span class="stat-value">&lt;1.0</span><span class="stat-label">RTF Target</span></div>
+                <div class="stat-divider"></div>
+                <div class="stat"><span class="stat-value">Offline</span><span class="stat-label">Core Runtime</span></div>
+                <div class="stat-divider"></div>
+                <div class="stat"><span class="stat-value">VI ↔ EN</span><span class="stat-label">MVP Pair</span></div>
+            </div>
+        </div>
+        <!-- Animated waveform -->
+        <div class="hero-wave">
+            <canvas id="waveCanvas"></canvas>
+        </div>
+    </section>
+
+    <!-- PIPELINE VISUALIZATION -->
+    <section class="pipeline-section" id="pipeline">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">How it works</span>
+                <h2>5-Stage Local Pipeline</h2>
+                <p>From raw audio to bilingual transcript with latency measured on each target device</p>
+            </div>
+            <div class="pipeline">
+                <div class="pipe-step" data-step="1">
+                    <div class="pipe-icon">🎤</div>
+                    <div class="pipe-label">Audio Capture</div>
+                    <div class="pipe-detail">AudioWorklet 16kHz<br>Adaptive Energy VAD</div>
+                </div>
+                <div class="pipe-arrow">→</div>
+                <div class="pipe-step" data-step="2">
+                    <div class="pipe-icon">🧠</div>
+                    <div class="pipe-label">Faster-Whisper ASR</div>
+                    <div class="pipe-detail">Tiny INT8 CPU<br>Context Priming</div>
+                </div>
+                <div class="pipe-arrow">→</div>
+                <div class="pipe-step" data-step="3">
+                    <div class="pipe-icon">✨</div>
+                    <div class="pipe-label">Post-Processing</div>
+                    <div class="pipe-detail">Confidence Gate<br>Hallucination Filter</div>
+                </div>
+                <div class="pipe-arrow">→</div>
+                <div class="pipe-step" data-step="4">
+                    <div class="pipe-icon">🌐</div>
+                    <div class="pipe-label">OPUS-MT Translation</div>
+                    <div class="pipe-detail">VI ↔ EN<br>Beam Size 1</div>
+                </div>
+                <div class="pipe-arrow">→</div>
+                <div class="pipe-step" data-step="5">
+                    <div class="pipe-icon">📝</div>
+                    <div class="pipe-label">Live Output</div>
+                    <div class="pipe-detail">Dual-Language<br>WebRTC Stream</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="features-section" id="features">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Features</span>
+                <h2>Built for Real-World Use</h2>
+                <p>Every component is designed to handle the chaos of live speech</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Latency by Design</h3>
+                    <p>Single-flight decoding, short segment buffering, and beam size 1 reduce duplicate inference. Current results are re-benchmarked per device.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>Confidence-Aware Output</h3>
+                    <p>Low-confidence or silent segments are rejected without loading a second correction model or repeating expensive ASR passes.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Context Priming</h3>
+                    <p>Local domain templates prime factory, maintenance, logistics, electrical, construction, and safety vocabulary. Cloud expansion is optional.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🖥️</div>
+                    <h3>Stable Display</h3>
+                    <p>Local Agreement algorithm prevents flickering in partial transcriptions — smooth, readable output.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🌊</div>
+                    <h3>Adaptive Energy VAD</h3>
+                    <p>A lightweight CPU gate adapts to the background level without loading a second neural model for every session.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📡</div>
+                    <h3>Local WebRTC Streaming</h3>
+                    <p>Direct WebRTC media is attempted on localhost/LAN; a WebSocket path remains the deterministic fallback.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section class="arch-section" id="architecture">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Architecture</span>
+                <h2>System Design</h2>
+                <p>One offline-first CPU pipeline shared by direct and Docker execution</p>
+            </div>
+            <div class="tech-stack">
+                <div class="tech-item"><span class="tech-badge asr">ASR</span> Faster-Whisper Tiny INT8</div>
+                <div class="tech-item"><span class="tech-badge vad">VAD</span> Adaptive energy gate</div>
+                <div class="tech-item"><span class="tech-badge nlp">Gate</span> Confidence + repetition checks</div>
+                <div class="tech-item"><span class="tech-badge nmt">NMT</span> OPUS-MT VI ↔ EN</div>
+                <div class="tech-item"><span class="tech-badge llm">Cloud</span> Optional Groq extras</div>
+                <div class="tech-item"><span class="tech-badge gpu">Local</span> CPU-only INT8</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- BENCHMARKS -->
+    <section class="bench-section" id="benchmarks">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Benchmarks</span>
+                <h2>Performance Validation</h2>
+                <p>The lightweight pipeline is being re-baselined. Targets are never presented as measured results.</p>
+            </div>
+            <div class="bench-table-wrap">
+                <table class="bench-table">
+                    <thead><tr><th>Metric</th><th>VI → EN</th><th>EN → VI</th></tr></thead>
+                    <tbody>
+                        <tr><td>BLEU / COMET</td><td colspan="2">Pending current-model benchmark</td></tr>
+                        <tr><td>End-of-speech latency</td><td colspan="2">Target &lt; 2 s p95</td></tr>
+                        <tr><td>Real-Time Factor</td><td colspan="2">Target &lt; 1.0</td></tr>
+                        <tr><td>WER / CER</td><td colspan="2">Pending clean + noisy evaluation</td></tr>
+                        <tr><td>Peak RAM / VRAM</td><td colspan="2">Pending per-device profile</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- DEMO -->
+    <section class="demo-section" id="demo">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Live Demo</span>
+                <h2>See it in Action</h2>
+                <p>Interactive simulation of the translation pipeline</p>
+            </div>
+            <div class="demo-container">
+                <div class="demo-window">
+                    <div class="demo-titlebar">
+                        <div class="demo-dots"><span></span><span></span><span></span></div>
+                        <span class="demo-title">TheDuo Edge — Live Translation</span>
+                    </div>
+                    <div class="demo-body">
+                        <div class="demo-controls">
+                            <button class="demo-rec-btn" id="demoPlayBtn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            </button>
+                            <span class="demo-status" id="demoStatus">Click play to start demo</span>
+                            <div class="demo-meter" id="demoMeter">
+                                <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                            </div>
+                        </div>
+                        <div class="demo-transcript" id="demoTranscript">
+                            <div class="demo-empty">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+                                <p>Transcript will appear here</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- QUICK START -->
+    <section class="start-section" id="start">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Getting Started</span>
+                <h2>Reproducible Test Profiles</h2>
+                <p>Use Python 3.11 and the same CPU entrypoint in every local test</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-num">⚡</div>
+                    <h3>Local CPU</h3>
+                    <pre><code>git clone https://github.com/Ricky13170/DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM.git
+cd DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM
+uv python install 3.11
+uv sync --locked --extra webrtc
+uv run python main.py</code></pre>
+                </div>
+                <div class="step-card">
+                    <div class="step-num">🖥️</div>
+                    <h3>Higher Accuracy</h3>
+                    <pre><code># Still CPU-only, but slower than Tiny
+uv run python main.py \
+  --whisper-model base</code></pre>
+                </div>
+                <div class="step-card">
+                    <div class="step-num">🐳</div>
+                    <h3>Docker CPU</h3>
+                    <pre><code># Docker CPU profile
+docker compose up --build</code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo-icon">🎙️</span>
+                    <span class="logo-text">TheDuo<span class="logo-ai"> Edge</span></span>
+                    <p>Offline-first Vietnamese–English frontline interpreter</p>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/Ricky13170/DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM" target="_blank">GitHub</a>
+                    <a href="#features">Features</a>
+                    <a href="#benchmarks">Benchmarks</a>
+                    <a href="#demo">Demo</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Research prototype · Model licenses must be reviewed before commercialization</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

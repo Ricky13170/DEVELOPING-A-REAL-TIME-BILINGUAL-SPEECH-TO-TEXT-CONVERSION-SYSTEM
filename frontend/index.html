@@ -5,11 +5,8 @@
   <meta charset="UTF-8">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ASR Thesis — Real-time Bilingual Speech-to-Text</title>
-  <meta name="description" content="Real-time bilingual speech-to-text with multi-language support and AI-powered transcription.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>TheDuo Edge — Offline Bilingual Speech</title>
+  <meta name="description" content="Offline-first bilingual speech transcription and translation for frontline teams.">
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -18,7 +15,8 @@
     <main class="main">
       <header class="toolbar">
         <div class="toolbar-left">
-          <h1 class="logo-text">ASR Thesis</h1>
+          <h1 class="logo-text">TheDuo Edge</h1>
+          <span class="transport-badge" id="transportBadge" data-state="offline" title="Audio transport">Offline</span>
 
           <!-- Audio Source -->
           <div class="dropdown">
@@ -247,36 +245,36 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label>Lecture Topic</label>
+          <label>Operational Context</label>
           <div class="input-icon-wrapper">
-            <input type="text" id="lectureTopic" placeholder="Enter lecture topic to boost accuracy..." maxlength="200">
+            <input type="text" id="lectureTopic" placeholder="e.g. conveyor maintenance, loading bay safety..." maxlength="200">
           </div>
-          <small class="form-hint">AI will expand this into keywords and context to improve recognition</small>
+          <small class="form-hint">Stored locally and used to prime technical vocabulary. AI expansion is an optional cloud extra.</small>
         </div>
         <div class="form-group">
           <label>Quick Templates</label>
           <div class="template-chips" id="templateChips">
-            <button class="template-chip" data-template="meeting">📋 Meeting</button>
-            <button class="template-chip" data-template="lecture">🎓 Lecture</button>
-            <button class="template-chip" data-template="interview">💼 Interview</button>
-            <button class="template-chip" data-template="medical">🏥 Medical</button>
-            <button class="template-chip" data-template="tech">💻 Tech Talk</button>
-            <button class="template-chip" data-template="legal">⚖️ Legal</button>
+            <button class="template-chip" data-template="factory">🏭 Factory</button>
+            <button class="template-chip" data-template="maintenance">🔧 Maintenance</button>
+            <button class="template-chip" data-template="logistics">📦 Logistics</button>
+            <button class="template-chip" data-template="safety">⚠️ Safety</button>
+            <button class="template-chip" data-template="construction">🏗️ Construction</button>
+            <button class="template-chip" data-template="electrical">⚡ Electrical</button>
           </div>
         </div>
         <div class="form-group">
           <label>Keywords</label>
-          <input type="text" id="keywords" placeholder="AI, machine learning, neural network...">
+          <input type="text" id="keywords" placeholder="PLC, conveyor, hydraulic valve, emergency stop...">
         </div>
         <div class="form-group">
           <label>Context</label>
-          <textarea id="context" placeholder="e.g. This script is about AI and deep learning. You should use technical terms like 'neural network', 'backpropagation'..."></textarea>
+          <textarea id="context" placeholder="e.g. Maintenance instructions for a conveyor line. Preserve machine IDs and safety commands."></textarea>
           <small class="form-hint">Provides richer context for better speech recognition accuracy</small>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="clearContextBtn">Clear</button>
-        <button class="btn btn-accent" id="aiContextBtn">Generate</button>
+        <button class="btn btn-accent" id="aiContextBtn" title="Optional cloud feature">AI expand</button>
         <button class="btn btn-primary" id="saveContextBtn">Save</button>
       </div>
     </div>

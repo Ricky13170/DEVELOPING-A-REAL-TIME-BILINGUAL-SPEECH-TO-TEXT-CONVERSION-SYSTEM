@@ -1,3 +1,5 @@
+import { WebRTCTransport } from './webrtc.js';
+
 const WS_RECONNECT_MS = 2000;
 const WS_MAX_RETRIES = 5;
 const WS_TIMEOUT_MS = 30000;
@@ -19,6 +21,10 @@ class SocketManager {
         this.onConnected = null;
         this.onDisconnected = null;
         this.onError = null;
+
+        // WebRTC transport (optional, for low-latency audio)
+        this.webrtc = null;
+        this.onWebRTCState = null;
     }
 
     async connect() {
@@ -62,6 +68,13 @@ class SocketManager {
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type === 'pong') return;
+
+                    // Route WebRTC signaling messages
+                    if (data.type?.startsWith('webrtc_') && this.webrtc) {
+                        this.webrtc.handleSignaling(data);
+                        return;
+                    }
+
                     if (this.onMessage) this.onMessage(data);
                 } catch (e) { }
             };
@@ -104,6 +117,10 @@ class SocketManager {
 
     close() {
         this.stopHeartbeat();
+        if (this.webrtc) {
+            this.webrtc.close();
+            this.webrtc = null;
+        }
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         if (this.ws) {
             this.ws.close(1000, 'User close');
@@ -111,6 +128,42 @@ class SocketManager {
         }
         this.connected = false;
         this.reconnectAttempts = 0;
+    }
+
+    /**
+     * Start WebRTC audio transport.
+     * @param {MediaStream} stream - Audio stream to send
+     * @returns {Promise<boolean>} True if WebRTC connected
+     */
+    async startWebRTC(stream) {
+        if (!WebRTCTransport.isSupported()) {
+            console.log('[Socket] WebRTC not supported, using WebSocket fallback');
+            return false;
+        }
+
+        this.stopWebRTC();
+        this.webrtc = new WebRTCTransport(this.ws, (state) => {
+            console.log(`[Socket] WebRTC state: ${state}`);
+            if (this.onWebRTCState) this.onWebRTCState(state);
+        });
+
+        const connected = await this.webrtc.connect(stream);
+        if (!connected) this.stopWebRTC();
+        return connected;
+    }
+
+    stopWebRTC() {
+        if (this.webrtc) {
+            this.webrtc.close();
+            this.webrtc = null;
+        }
+    }
+
+    /**
+     * Whether audio is being sent via WebRTC.
+     */
+    get isWebRTCActive() {
+        return this.webrtc?.isStreaming ?? false;
     }
 
     isConnected() {

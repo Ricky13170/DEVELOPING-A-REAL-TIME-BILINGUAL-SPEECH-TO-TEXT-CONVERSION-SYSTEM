@@ -10,6 +10,7 @@ class UIManager {
             audioMeter: document.getElementById('audioMeter'),
             timer: document.getElementById('timer'),
             recordBtn: document.getElementById('recordBtn'),
+            transportBadge: document.getElementById('transportBadge'),
             panelContent: document.getElementById('panelContent'),
             fontDecrease: document.getElementById('fontDecrease'),
             fontIncrease: document.getElementById('fontIncrease'),
@@ -69,8 +70,9 @@ class UIManager {
         // Display mode: 'mixed' (original + translation together) or 'split' (side by side)
         this.displayMode = localStorage.getItem('asr_displayMode') || 'mixed';
 
-        // Language state — source is always 'auto'
-        this.srcLang = 'auto';
+        // OneVoice MVP supports one bidirectional pair. Selecting the target
+        // deterministically selects the other language as the source.
+        this.srcLang = loadLanguagePreference().srcCode;
         this.tgtLang = loadLanguagePreference().tgtCode;
 
         this.setupEventHandlers();
@@ -152,14 +154,15 @@ class UIManager {
     }
 
     getSelectedLanguages() {
-        const src = getLanguage(this.srcLang);
         const tgt = getLanguage(this.tgtLang);
+        this.srcLang = this.tgtLang === 'vi' ? 'en' : 'vi';
+        const src = getLanguage(this.srcLang);
         return {
             srcCode: this.srcLang,
             tgtCode: this.tgtLang,
             srcWhisper: src?.whisper || null,
-            srcNllb: src?.nllb || null,
-            tgtNllb: tgt?.nllb || null,
+            srcTranslation: src?.translation || null,
+            tgtTranslation: tgt?.translation || null,
         };
     }
 
@@ -844,6 +847,27 @@ class UIManager {
         setTimeout(() => this.el.notification.classList.remove('active'), 2500);
     }
 
+    updateTransportStatus(mode) {
+        const badge = this.el.transportBadge;
+        if (!badge) return;
+        const labels = {
+            offline: 'Offline',
+            ready: 'Local ready',
+            ws: 'WebSocket',
+            webrtc: 'WebRTC',
+        };
+        badge.dataset.state = mode;
+        badge.textContent = labels[mode] || mode;
+    }
+
+    setCloudExtrasEnabled(enabled) {
+        if (!this.el.aiContextBtn) return;
+        this.el.aiContextBtn.disabled = !enabled;
+        this.el.aiContextBtn.title = enabled
+            ? 'Generate context with the optional Groq service'
+            : 'Disabled in offline mode; enter keywords manually';
+    }
+
     /* ═══════════ MODALS ═══════════ */
 
     closeClearModal() {
@@ -929,35 +953,35 @@ class UIManager {
 
     applyTemplate(name) {
         const TEMPLATES = {
-            meeting: {
-                topic: 'Business Meeting',
-                keywords: 'agenda, minutes, action items, deadline, project, budget, stakeholders, KPI',
-                context: 'This script is about a business meeting. You should use terms like agenda, minutes, action items, deadline, project update, and stakeholder.',
+            factory: {
+                topic: 'Factory operations',
+                keywords: 'production line, conveyor, PLC, sensor, motor, shift, quality inspection',
+                context: 'Frontline factory communication. Preserve equipment identifiers, measurements, and short operational commands.',
             },
-            lecture: {
-                topic: 'Academic Lecture',
-                keywords: 'theory, concept, methodology, research, hypothesis, analysis, conclusion',
-                context: 'This script is about an academic lecture. You should use terms like theory, methodology, hypothesis, research findings, and analysis.',
+            maintenance: {
+                topic: 'Equipment maintenance',
+                keywords: 'inspection, hydraulic valve, bearing, lubrication, pressure, torque, lockout tagout',
+                context: 'Maintenance instructions and fault diagnosis for industrial equipment.',
             },
-            interview: {
-                topic: 'Job Interview',
-                keywords: 'experience, qualifications, skills, role, team, compensation, culture',
-                context: 'This script is about a job interview. You should use terms like experience, qualifications, skills, role responsibilities, and compensation.',
+            logistics: {
+                topic: 'Warehouse logistics',
+                keywords: 'loading bay, pallet, forklift, shipment, inventory, barcode, dispatch',
+                context: 'Warehouse and logistics coordination with locations, quantities, and vehicle identifiers.',
             },
-            medical: {
-                topic: 'Medical Consultation',
-                keywords: 'symptoms, diagnosis, treatment, medication, prescription, follow-up, patient',
-                context: 'This script is about a medical consultation. You should use terms like symptoms, diagnosis, treatment, medication, and prescription.',
+            safety: {
+                topic: 'Workplace safety',
+                keywords: 'stop machine, emergency, danger, fire, high voltage, evacuate, do not enter',
+                context: 'Safety-critical commands. Keep warnings direct and do not soften imperative meaning.',
             },
-            tech: {
-                topic: 'Technical Presentation',
-                keywords: 'API, database, architecture, framework, deployment, scalability, performance',
-                context: 'This script is about a technical presentation. You should use terms like API, database, architecture, framework, deployment, and scalability.',
+            construction: {
+                topic: 'Construction site',
+                keywords: 'scaffold, crane, concrete, load, helmet, restricted area, site supervisor',
+                context: 'Construction-site instructions, safety warnings, tools, and material handling.',
             },
-            legal: {
-                topic: 'Legal Discussion',
-                keywords: 'contract, clause, compliance, regulation, liability, amendment, jurisdiction',
-                context: 'This script is about a legal discussion. You should use terms like contract, clause, compliance, regulation, liability, and jurisdiction.',
+            electrical: {
+                topic: 'Electrical maintenance',
+                keywords: 'voltage, current, circuit breaker, panel, grounding, insulation, high voltage',
+                context: 'Electrical inspection and maintenance. Preserve units, panel names, and isolation commands.',
             },
         };
         const tpl = TEMPLATES[name];
@@ -1101,7 +1125,7 @@ class UIManager {
     get _i18n() {
         return {
             en: {
-                appTitle: 'ASR Thesis',
+                appTitle: 'TheDuo Edge',
                 settings: 'Settings',
                 appearance: 'Appearance',
                 theme: 'Theme',
@@ -1111,7 +1135,7 @@ class UIManager {
                 sendFeedback: 'Send Feedback',
                 done: 'Done',
                 contextSettings: 'Context Settings',
-                lectureTopic: 'Lecture Topic',
+                lectureTopic: 'Operational Context',
                 quickTemplates: 'Quick Templates',
                 keywords: 'Keywords',
                 context: 'Context',
@@ -1121,7 +1145,7 @@ class UIManager {
                 clickRecord: 'Click record to start',
             },
             vi: {
-                appTitle: 'ASR Thesis',
+                appTitle: 'TheDuo Edge',
                 settings: 'Cài đặt',
                 appearance: 'Giao diện',
                 theme: 'Chủ đề',
@@ -1131,7 +1155,7 @@ class UIManager {
                 sendFeedback: 'Gửi phản hồi',
                 done: 'Xong',
                 contextSettings: 'Cài đặt ngữ cảnh',
-                lectureTopic: 'Chủ đề bài giảng',
+                lectureTopic: 'Ngữ cảnh vận hành',
                 quickTemplates: 'Mẫu nhanh',
                 keywords: 'Từ khóa',
                 context: 'Ngữ cảnh',

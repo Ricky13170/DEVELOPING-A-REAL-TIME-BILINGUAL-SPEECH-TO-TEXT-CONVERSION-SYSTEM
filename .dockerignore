@@ -1,0 +1,53 @@
+# Version control and editor metadata
+.git/
+.github/
+.agents/
+.codex/
+.vscode/
+.idea/
+
+# Local Python environments and caches
+venv/
+.venv/
+env/
+.uv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
+
+# Downloaded models, generated audio and local data
+model_cache/
+models/
+.huggingface/
+*.pt
+*.bin
+*.safetensors
+*.wav
+*.mp3
+*.m4a
+*.ogg
+logs/
+debug_audio/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Material not needed by the runtime image
+docs/
+proposal/
+notebooks/
+**/*.ipynb
+tests/
+*.pdf
+README.md
+uv.lock
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini

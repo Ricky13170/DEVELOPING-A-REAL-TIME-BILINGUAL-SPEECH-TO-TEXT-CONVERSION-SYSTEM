@@ -20,6 +20,10 @@ class RecordingsManager {
         this.selectedId = null;
         this.recordings = [];
         this.menuOpenId = null;
+        this._originalSummary = null;
+        this._summaryLayoutBlocks = null;
+        this._currentSummaryBlocks = null;
+        this.groqAvailable = false;
     }
 
     init() {
@@ -28,6 +32,7 @@ class RecordingsManager {
         this.setupModals();
         this.setupSummarize();
         this.setupQA();
+        this.configureOptionalFeatures();
 
 
         const preSelected = localStorage.getItem('selectedRecordingId');
@@ -521,7 +526,7 @@ class RecordingsManager {
             };
         }
 
-        // Language change → translate via NLLB
+        // Language change → translate through the local VI↔EN model
         if (this.summaryLangSelect) {
             this.summaryLangSelect.onchange = () => this._translateSummary();
         }
@@ -539,6 +544,27 @@ class RecordingsManager {
             this._summaryFontSize = Math.min(1.6, this._summaryFontSize + 0.05);
             this._applySummaryFontSize();
         };
+    }
+
+    async configureOptionalFeatures() {
+        try {
+            const response = await fetch('/api/status');
+            const data = response.ok ? await response.json() : {};
+            this.groqAvailable = Array.isArray(data.features)
+                && data.features.includes('groq_extras');
+        } catch (error) {
+            this.groqAvailable = false;
+        }
+
+        const askAiBtn = document.getElementById('askAiBtn');
+        const qaSendBtn = document.getElementById('qaSendBtn');
+        for (const button of [this.summarizeBtn, askAiBtn, qaSendBtn]) {
+            if (!button) continue;
+            button.disabled = !this.groqAvailable;
+            if (!this.groqAvailable) {
+                button.title = 'Optional cloud AI is disabled in offline mode';
+            }
+        }
     }
 
     async summarizeSelected() {
@@ -581,7 +607,7 @@ class RecordingsManager {
         } catch (e) {
             this.showNotification('Summary failed');
         } finally {
-            if (this.summarizeBtn) this.summarizeBtn.disabled = false;
+            if (this.summarizeBtn) this.summarizeBtn.disabled = !this.groqAvailable;
         }
     }
 
@@ -595,8 +621,8 @@ class RecordingsManager {
         }
 
         const option = this.summaryLangSelect.selectedOptions[0];
-        const tgtNllb = option?.dataset?.nllb;
-        if (!tgtNllb) return;
+        const targetLanguage = option?.dataset?.translation;
+        if (!targetLanguage) return;
 
         if (this.summaryContent) {
             this.summaryContent.innerHTML = '<div class="summary-loading">Translating...</div>';
@@ -610,7 +636,7 @@ class RecordingsManager {
                 const resp = await fetch('/api/translate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: block.text, src_lang: 'eng_Latn', tgt_lang: tgtNllb })
+                    body: JSON.stringify({ text: block.text, src_lang: 'eng_Latn', tgt_lang: targetLanguage })
                 });
 
                 if (!resp.ok) return { ...block };
@@ -852,7 +878,7 @@ class RecordingsManager {
             if (resp.ok) {
                 const data = await resp.json();
                 typingEl.classList.remove('typing');
-                typingEl.textContent = data.answer || 'No answer generated.';
+                typingEl.textContent = this._stripMarkdown(data.answer || 'No answer generated.');
             } else {
                 typingEl.classList.remove('typing');
                 typingEl.textContent = 'Could not get an answer. Please try again.';
@@ -870,6 +896,24 @@ class RecordingsManager {
         this.qaChat?.appendChild(msg);
         if (this.qaChat) this.qaChat.scrollTop = this.qaChat.scrollHeight;
         return msg;
+    }
+
+    _stripMarkdown(text) {
+        if (!text) return '';
+
+        return String(text)
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/^\s{0,3}#{1,6}\s*/gm, '')
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/__(.*?)__/g, '$1')
+            .replace(/\*(.*?)\*/g, '$1')
+            .replace(/_(.*?)_/g, '$1')
+            .replace(/`([^`]*)`/g, '$1')
+            .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+            .replace(/^[ \t]*[-*+][ \t]+/gm, '')
+            .replace(/^[ \t]*>+[ \t]?/gm, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
     }
 
     _escapeHtml(str) {

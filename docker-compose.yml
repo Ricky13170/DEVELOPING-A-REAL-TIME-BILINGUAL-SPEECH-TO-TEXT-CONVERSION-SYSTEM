@@ -1,0 +1,30 @@
+# CPU-only local runtime:
+#   docker compose up --build
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        INSTALL_WEBRTC: "${INSTALL_WEBRTC:-0}"
+        INSTALL_GROQ: "${INSTALL_GROQ:-0}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - model_cache:/app/model_cache
+    environment:
+      ENABLE_GROQ: "${ENABLE_GROQ:-0}"
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      WHISPER_MODEL: "${WHISPER_MODEL:-tiny}"
+      ASR_DEVICE: cpu
+      ASR_COMPUTE_TYPE: int8
+      CPU_THREADS: "${CPU_THREADS:-2}"
+      TRANSLATION_MODEL_VI_EN: "${TRANSLATION_MODEL_VI_EN:-Helsinki-NLP/opus-mt-vi-en}"
+      TRANSLATION_MODEL_EN_VI: "${TRANSLATION_MODEL_EN_VI:-Helsinki-NLP/opus-mt-en-vi}"
+      TRANSLATION_DEVICE: cpu
+      ENABLE_PARTIAL_TRANSCRIPTS: "0"
+      MAX_HALLUCINATION_RETRIES: "0"
+    shm_size: "1gb"
+
+volumes:
+  model_cache:

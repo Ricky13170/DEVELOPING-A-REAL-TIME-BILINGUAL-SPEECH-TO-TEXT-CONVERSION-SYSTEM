@@ -10,7 +10,10 @@ class ASRApp {
     this.uiMgr = new UIManager();
     this.isRecording = false;
     this.isConnecting = false;
+    this.isFinalizing = false;
+    this.stopSaveTimer = null;
     this.serverReady = false;
+    this.webRTCAllowed = true;
     this.transcripts = {};
     this.sessionId = null;
     this.lectureTopic = "";
@@ -62,6 +65,11 @@ class ASRApp {
       if (res.ok) {
         const data = await res.json();
         this.serverReady = true;
+        this.webRTCAllowed = Boolean(data.webrtc_available);
+        this.uiMgr.updateTransportStatus("ready");
+        this.uiMgr.setCloudExtrasEnabled(
+          Array.isArray(data.features) && data.features.includes("groq_extras"),
+        );
 
         if (spinnerEl) spinnerEl.classList.add("hidden");
         if (statusEl) {
@@ -87,8 +95,9 @@ class ASRApp {
         }
         if (hintEl)
           hintEl.textContent =
-            "No backend detected — UI preview only. Deploy to Modal for full ASR.";
+            "No backend detected — run main.py to start the local CPU server.";
         console.log("[ASR] No backend detected, running in preview mode");
+        this.uiMgr.updateTransportStatus("offline");
       }
     }
   }
@@ -121,6 +130,7 @@ class ASRApp {
           this.uiMgr.showNotification("Recording...");
         } else if (data.status === "stopped") {
           this.uiMgr.showNotification("Stopped");
+          this.completeStopSave();
         }
       } else if (data.type === "log") {
         this.uiMgr.showNotification(data.message || "");
@@ -130,9 +140,11 @@ class ASRApp {
     this.socketMgr.onConnected = () => {
       this.isConnecting = false;
       this.serverReady = true;
+      this.uiMgr.updateTransportStatus("ws");
     };
 
     this.socketMgr.onDisconnected = () => {
+      this.uiMgr.updateTransportStatus("offline");
       if (this.isRecording) {
         this.uiMgr.showNotification("Disconnected");
         this.stopRecording();
@@ -142,6 +154,15 @@ class ASRApp {
     this.socketMgr.onError = () => {
       this.isConnecting = false;
       this.uiMgr.showNotification("Connection error");
+    };
+    this.socketMgr.onWebRTCState = (state) => {
+      if (state === "connected") this.uiMgr.updateTransportStatus("webrtc");
+      if (["failed", "disconnected", "closed"].includes(state)) {
+        this.audioMgr.useWebRTC = false;
+        if (state !== "closed") this.socketMgr.stopWebRTC();
+        console.warn("[ASR] WebRTC unavailable; resumed WebSocket audio fallback");
+        if (this.socketMgr.isConnected()) this.uiMgr.updateTransportStatus("ws");
+      }
     };
   }
 
@@ -166,8 +187,8 @@ class ASRApp {
       if (this.isRecording && this.socketMgr.isConnected()) {
         this.socketMgr.send("lang_change", {
           srcLang: langs.srcWhisper,
-          srcNllb: langs.srcNllb,
-          tgtNllb: langs.tgtNllb,
+          srcTranslation: langs.srcTranslation,
+          tgtTranslation: langs.tgtTranslation,
         });
         this.uiMgr.showNotification("Language switching...");
       }
@@ -241,6 +262,10 @@ class ASRApp {
 
   async startRecording() {
     if (this.isConnecting) return;
+    if (this.isFinalizing) {
+      this.uiMgr.showNotification("Finalizing the previous translation...");
+      return;
+    }
     if (!this.serverReady) {
       this.uiMgr.showNotification("Server loading...");
       // Show loading spinner on record button
@@ -279,19 +304,42 @@ class ASRApp {
       this.socketMgr.send("start", {
         srcLang: langs.srcWhisper,
         tgtLang: langs.tgtCode,
-        srcNllb: langs.srcNllb,
-        tgtNllb: langs.tgtNllb,
+        srcTranslation: langs.srcTranslation,
+        tgtTranslation: langs.tgtTranslation,
         translate: true,
         topic: topic,
       });
 
+      // WebSocket audio covers the entire WebRTC negotiation window so the
+      // first words are never discarded while waiting for ICE.
       this.isRecording = true;
-      this.isConnecting = false;
       this.uiMgr.startTimer();
       this.uiMgr.updateRecordButton(true);
+
+      // Try WebRTC for lower latency audio transport
+      const stream = this.audioMgr.getActiveStream();
+      if (stream && this.webRTCAllowed) {
+        const webrtcOk = await this.socketMgr.startWebRTC(stream);
+        if (webrtcOk) {
+          this.audioMgr.useWebRTC = true;
+          this.uiMgr.updateTransportStatus("webrtc");
+          console.log('[ASR] Using WebRTC audio transport');
+        } else {
+          this.audioMgr.useWebRTC = false;
+          this.uiMgr.updateTransportStatus("ws");
+          console.log('[ASR] Using WebSocket audio transport (fallback)');
+        }
+      } else {
+        this.audioMgr.useWebRTC = false;
+        this.uiMgr.updateTransportStatus("ws");
+      }
+
+      this.isConnecting = false;
     } catch (err) {
       this.isConnecting = false;
       this.isRecording = false;
+      if (this.audioMgr.isRecording) this.audioMgr.stopRecording();
+      this.socketMgr.stopWebRTC();
       this.uiMgr.updateRecordButton(false);
       this.uiMgr.resetAudioMeter();
       this.uiMgr.showNotification(err.message || "Could not start");
@@ -299,11 +347,17 @@ class ASRApp {
   }
 
   async stopRecording() {
-    if (this.socketMgr.isConnected()) {
-      this.socketMgr.send("stop");
-    }
-
+    const waitForServer = this.socketMgr.isConnected();
+    this.isFinalizing = true;
+    const wasWebRTC = this.audioMgr.useWebRTC;
+    this.audioMgr.useWebRTC = false;
     this.audioMgr.stopRecording();
+    this.socketMgr.stopWebRTC();
+
+    // Let the last RTP packet reach the server. WebSocket flushes synchronously
+    // above, so ordering is also correct for the fallback transport.
+    if (wasWebRTC) await new Promise((resolve) => setTimeout(resolve, 120));
+    if (waitForServer && this.socketMgr.isConnected()) this.socketMgr.send("stop");
 
     this.isRecording = false;
     this.isConnecting = false;
@@ -311,7 +365,20 @@ class ASRApp {
     this.uiMgr.resetAudioMeter();
     this.uiMgr.updateRecordButton(false);
 
-    await new Promise((r) => setTimeout(r, 1500));
+    if (!waitForServer) {
+      this.completeStopSave();
+      return;
+    }
+
+    clearTimeout(this.stopSaveTimer);
+    this.stopSaveTimer = setTimeout(() => this.completeStopSave(), 12000);
+  }
+
+  completeStopSave() {
+    if (!this.isFinalizing) return;
+    clearTimeout(this.stopSaveTimer);
+    this.stopSaveTimer = null;
+    this.isFinalizing = false;
     this.saveRecording();
   }
 

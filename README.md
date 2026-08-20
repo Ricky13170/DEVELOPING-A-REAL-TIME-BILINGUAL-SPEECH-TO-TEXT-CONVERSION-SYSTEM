@@ -1,151 +1,78 @@
-<p align="center">
-  <h1 align="center">DEVELOPING A REAL-TIME BILINGUAL SPEECH-TO-TEXT CONVERSION SYSTEM</h1>
-  <p align="center">
-    <strong>Real-time Vietnamese → English Neural Speech Translation</strong>
-    <br>
-    <em>Low-latency, production-ready pipeline for academic environments.</em>
-  </p>
-</p>
+# TheDuo Edge Interpreter
 
-<p align="center">
-  <img src="https://img.shields.io/badge/ASR-WhisperX-blue?style=for-the-badge" alt="ASR">
-  <img src="https://img.shields.io/badge/NMT-NLLB%203.3B-green?style=for-the-badge" alt="NMT">
-  <img src="https://img.shields.io/badge/Backend-Modal-9b59b6?style=for-the-badge" alt="Modal">
-  <img src="https://img.shields.io/badge/GPU-A100-orange?style=for-the-badge" alt="GPU">
-</p>
+CPU-only Vietnamese ↔ English speech transcription and translation for frontline communication.
 
----
+## Lightweight pipeline
 
-## ⚡ Overview
-
-**Developing a real-time bilingual speech-to-text conversion system** is a high-performance, real-time speech translation system specifically optimized for Vietnamese lectures. It transforms live audio into dual-language transcripts with under **600ms** end-to-end latency.
-
-Built on top of **WhisperX**, **BARTpho**, and **NLLB-200**, it solves typical real-time ASR pain points: hallucinations, terminology corruption, and display flickering.
-
----
-
-<p align="center">
-  <img src="images/image-1.png" alt="ASR System Banner" width="800">
-</p>
-
-## 📐 System Architecture
-
-The system utilizes a serverless GPU architecture on **Modal**, allowing for elastic scaling and zero-maintenance infrastructure.
-
-<p align="center">
-  <img src="images/image-2.png" alt="System Architecture Diagram" width="700">
-</p>
-
----
-
-## ✨ Key Features
-
-- 🚀 **Sub-second Latency**: Processing optimized for real-time streaming using segment-based buffering.
-- 🎯 **Domain-Aware**: Groq-powered context priming expanding lecture topics into ASR keywords.
-- 🛠️ **Smart Correction**: "English-Aware" BARTpho post-processing that fixes Vietnamese spelling while protecting technical terms like _API, Neural Network, Docker_.
-- 🖼️ **Stable UI**: Local Agreement algorithm prevents "flickering" in partial transcriptions.
-- 🌊 **Seamless VAD**: Pyannote neural segmenter ensures high accuracy even in noisy environments.
-- 📝 **Auto-Summarization**: Generating markdown summaries of entire sessions automatically.
-
----
-
-## 🛠️ Technology Stack
-
-| Layer     | Component               | Technology                                       |
-| :-------- | :---------------------- | :----------------------------------------------- |
-| **ASR**   | **Speech Recognition**  | `WhisperX (large-v3)` with CTranslate2 engine    |
-| **VAD**   | **Audio Segmentation**  | `Pyannote Audio` (Neural segmentation)           |
-| **NLP**   | **Syllable Correction** | `BARTpho + LoRA` (English-aware adapter)         |
-| **NMT**   | **Translation Engine**  | `NLLB-200 (3.3B)` (High-performance translation) |
-| **AI**    | **Context & Summary**   | `LLaMA 3.1 (Groq API)` for intelligence          |
-| **Cloud** | **Compute Layer**       | `Modal` (Serverless NVIDIA A100 GPUs)            |
-| **Web**   | **Real-time Comms**     | `FastAPI` + `WebSockets`                         |
-
----
-
-## 🚀 Quick Start
-
-### 1. Prerequisites
-
-- [Modal Token](https://modal.com/docs/guide/token)
-- [uv](https://github.com/astral-sh/uv) (Extremely fast Python package manager)
-- [Groq API Key](https://console.groq.com/keys) (for context priming & auto-summary)
-- [HuggingFace Token](https://huggingface.co/settings/tokens) (for downloading gated models)
-
-### 2. Setup environment
-
-```bash
-# Clone the repository
-git clone https://github.com/Ricky13170/DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM.git
-cd DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM
-
-# Create virtual environment and install dependencies
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env and fill in your API keys:
-#   GROQ_API_KEY=gsk_...
-#   HF_TOKEN=hf_...
-
-# Authenticate with Modal
-modal token new
+```text
+Microphone → WebRTC/WebSocket → energy VAD
+           → Faster-Whisper tiny INT8 (CPU)
+           → OPUS-MT VI↔EN beam 1 (CPU, lazy load)
+           → bilingual transcript
 ```
 
-### 3. Deploy
+The local runtime never selects CUDA. BARTpho, WhisperX, Pyannote, DeepFilterNet, NLLB, repeated ASR retries, and second-pass translation are not in the realtime path.
 
-```bash
-modal deploy main.py
+## Run locally
+
+Requires Python 3.11:
+
+```powershell
+uv python install 3.11
+uv sync --locked --extra webrtc
+uv run python main.py
 ```
 
-> 🌐 **Visit the URL** in the terminal output to start transcribing!
+`main.py` is the only application entrypoint; Docker uses the same file.
 
----
+Open `http://localhost:8000`. The first run downloads Whisper Tiny and the VI→EN OPUS-MT checkpoint. The EN→VI checkpoint is downloaded only after switching direction.
 
-## 📊 Benchmarks
+For better ASR accuracy, with higher CPU latency:
 
-Evaluated on **NVIDIA A100 40GB** using Google FLEURS VI test set.
-
-| Metric                      | Performance         |
-| --------------------------- | ------------------- |
-| **End-to-End Latency**      | ~604ms (3s chunks)  |
-| **RTF (Real-Time Factor)**  | ~0.20               |
-| **VAD GPU Savings**         | 15.9%               |
-| **Hallucination Rejection** | 776 segments caught |
-
-<p align="center">
-  <img src="images/image-3.png" alt="Benchmark UI and History" width="700">
-</p>
-
----
-
-## 📁 Project Structure
-
-```
-├── .env.example             # Template for API keys and configuration
-├── main.py                  # Modal entry point & FastAPI session handler
-├── backend/                 # AI Core - Multi-stage pipeline
-│   ├── config.py            # Global hyper-parameters & model paths
-│   ├── handler.py           # ASRService orchestration & WebSocket logic
-│   ├── asr.py               # WhisperX engine with adaptive normalization
-│   ├── vad.py               # Pyannote-based neural speech detection
-│   ├── bartpho_corrector.py # English-aware Vietnamese syllable fixer
-│   ├── translation.py       # NLLB-200 NMT service
-│   ├── speech_segment_buffer.py # Buffering with overlap context
-│   ├── local_agreement.py   # Transcript stabilization algorithm
-│   └── audio_normalizer.py  # Signal processing & noise floor management
-├── frontend/                # Vanilla JS Web UI
-│   ├── js/audio.js          # AudioWorklet (16kHz) capture
-│   └── js/ui.js             # Real-time dual-lang rendering
-└── test/                    # Academic benchmark scripts
+```powershell
+uv run python main.py --whisper-model base
 ```
 
----
+WebRTC is attempted only for local direct connections. If `aiortc` or ICE is unavailable, audio automatically uses WebSocket.
 
-## 📝 License & Credits
+## Docker CPU
 
-Licensed under the [MIT License](LICENSE).
+```powershell
+docker compose up --build
+```
 
-Developed as a Graduation Thesis for **Ton Duc Thang University**.
+Set `INSTALL_WEBRTC=1` before building if the container needs WebRTC. `.dockerignore` excludes local environments and model caches.
+
+## Defaults
+
+```dotenv
+WHISPER_MODEL=tiny
+ASR_DEVICE=cpu
+ASR_COMPUTE_TYPE=int8
+CPU_THREADS=2
+TRANSLATION_MODEL_VI_EN=Helsinki-NLP/opus-mt-vi-en
+TRANSLATION_MODEL_EN_VI=Helsinki-NLP/opus-mt-en-vi
+TRANSLATION_DEVICE=cpu
+ENABLE_PARTIAL_TRANSCRIPTS=false
+MAX_HALLUCINATION_RETRIES=0
+ENABLE_GROQ=false
+```
+
+Both OPUS-MT checkpoints are Apache-2.0. Groq remains an optional cloud extra and should stay disabled for offline tests.
+
+## Project structure and smoke test
+
+The backend uses only two feature packages: `speech` and `realtime`. See
+[docs/architecture.md](docs/architecture.md) for the ownership rules and the
+folder-structure rationale.
+
+```powershell
+uv run python -m unittest discover -s tests -v
+```
+
+## OneVoice proposal
+
+The final device must include offline ASR, translation, and TTS. This repository currently implements ASR + text translation; offline TTS, real noisy-speech benchmarks, peak RAM/power measurements, and Qualcomm/QNN deployment remain proposal milestones.
+
+See [proposal/context.md](proposal/context.md) for the rubric, architecture
+notes, measurement checklist, and verified official links.

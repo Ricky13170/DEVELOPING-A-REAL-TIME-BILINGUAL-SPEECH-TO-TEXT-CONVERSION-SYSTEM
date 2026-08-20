@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import re
 from typing import Optional
 from backend.config import GROQ_API_KEY, GROQ_MODEL, GROQ_TIMEOUT
 
@@ -38,7 +39,7 @@ class GroqService:
             language: Source language
             
         Returns:
-            Comma-separated keywords string for WhisperX initial_prompt
+            Comma-separated keywords string for the Faster-Whisper initial prompt
         """
         if not self.is_available or not topic.strip():
             return ""
@@ -121,6 +122,7 @@ Summary:"""
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, self._chat, prompt)
+            result = self._to_plain_text(result)
             logger.info(f"[Groq] Summary generated ({len(result)} chars)")
             return result
             
@@ -191,12 +193,33 @@ Answer:"""
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, self._chat, prompt)
+            result = self._to_plain_text(result)
             logger.info(f"[Groq] Answered question for topic '{topic[:30]}'")
             return result
         except Exception as e:
             logger.error(f"[Groq] answer_question error: {e}")
             return ""
     
+    @staticmethod
+    def _to_plain_text(text: str) -> str:
+        """Remove common Markdown syntax before returning text to the UI."""
+        if not text:
+            return ""
+
+        cleaned = text
+        cleaned = re.sub(r"```[\s\S]*?```", "", cleaned)
+        cleaned = re.sub(r"^\s{0,3}#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned)
+        cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
+        cleaned = re.sub(r"\*(.*?)\*", r"\1", cleaned)
+        cleaned = re.sub(r"_(.*?)_", r"\1", cleaned)
+        cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
+        cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)
+        cleaned = re.sub(r"^[ \t]*[-*+][ \t]+", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^[ \t]*>+[ \t]?", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
+
     def _chat(self, prompt: str) -> str:
         """Synchronous Groq chat completion"""
         if not self.client:
@@ -205,7 +228,10 @@ Answer:"""
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": "You are a helpful academic assistant specialized in lecture comprehension."},
+                {
+                    "role": "system",
+                    "content": "You are a precise academic assistant. Follow the requested format exactly and return plain text unless Markdown is explicitly requested.",
+                },
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
