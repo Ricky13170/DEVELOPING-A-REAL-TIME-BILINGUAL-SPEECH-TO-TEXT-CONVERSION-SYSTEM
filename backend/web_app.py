@@ -1,4 +1,4 @@
-"""FastAPI application factory for the CPU runtime."""
+"""FastAPI application factory shared by local and Modal runtimes."""
 
 from __future__ import annotations
 
@@ -82,6 +82,8 @@ def create_web_app(
                     "en_vi": cfg.TRANSLATION_MODEL_EN_VI,
                 },
                 "translation_device": cfg.TRANSLATION_DEVICE,
+                "sample_rate": cfg.SAMPLE_RATE,
+                "audio_send_interval_ms": cfg.AUDIO_SEND_INTERVAL_MS,
                 "compute": compute_label,
                 "webrtc_available": webrtc_available,
                 "uptime_seconds": int(time.time() - start_time),

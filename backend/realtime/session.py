@@ -16,7 +16,10 @@ from backend.config import (
     ENABLE_GROQ, ENABLE_PARTIAL_TRANSCRIPTS, MAX_HALLUCINATION_RETRIES,
     WHISPER_MODEL, WHISPER_LANGUAGE, ASR_DEVICE, ASR_COMPUTE_TYPE,
     TRANSLATION_MODEL_VI_EN, TRANSLATION_MODEL_EN_VI,
-    TRANSLATION_SRC_LANG, TRANSLATION_TGT_LANG, TRANSLATION_DEVICE
+    TRANSLATION_SRC_LANG, TRANSLATION_TGT_LANG, TRANSLATION_DEVICE,
+    AUDIO_DRAIN_TIMEOUT_SEC, AUDIO_QUEUE_MAX_CHUNKS,
+    HALLUCINATION_RETRY_TEMPERATURES, MODEL_CACHE_DIR,
+    PARTIAL_FINALIZE_TIMEOUT_SEC, TRANSLATION_DRAIN_TIMEOUT_SEC
 )
 from backend.speech.asr import WhisperASR
 from backend.translation import MarianTranslator
@@ -40,8 +43,7 @@ class ASRService:
         loop = asyncio.get_event_loop()
         
         # Read from config after main.py applies command-line overrides.
-        cache_base = os.environ.get("HF_HOME", "/cache/huggingface")
-        cache_parent = os.path.dirname(cache_base) if cache_base != "/cache/huggingface" else "/cache"
+        cache_parent = MODEL_CACHE_DIR
 
         print("[Model] Loading Whisper...")
         self.asr = WhisperASR(
@@ -96,12 +98,12 @@ class ASRSession:
         self.webrtc: Optional[WebRTCTransport] = None
         self._background_tasks = set()
         self._translation_tasks = set()
-        self._audio_queue = asyncio.Queue(maxsize=128)
+        self._audio_queue = asyncio.Queue(maxsize=AUDIO_QUEUE_MAX_CHUNKS)
         self._audio_worker_task = None
         self._recording_generation = 0
         self._draining_generation = None
-        self._audio_drain_timeout = 5.0
-        self._translation_drain_timeout = 8.0
+        self._audio_drain_timeout = AUDIO_DRAIN_TIMEOUT_SEC
+        self._translation_drain_timeout = TRANSLATION_DRAIN_TIMEOUT_SEC
         
         # Session state
         self.is_recording = False
@@ -113,7 +115,7 @@ class ASRSession:
         self.pending_partial_time = None      
         self._pending_partial_asr_ms = None
         self._pending_partial_audio_duration_ms = None
-        self.PARTIAL_FINALIZE_TIMEOUT = 3.0
+        self.PARTIAL_FINALIZE_TIMEOUT = PARTIAL_FINALIZE_TIMEOUT_SEC
         
         # Overlap deduplication tracking
         self.prev_final_text = None
@@ -582,7 +584,9 @@ class ASRSession:
                 return
 
             print(f"⚠️ Confidence gate: reason={reason} | text='{text[:80]}'")
-            fallback_temperatures = [0.2, 0.4, 0.6][:MAX_HALLUCINATION_RETRIES]
+            fallback_temperatures = HALLUCINATION_RETRY_TEMPERATURES[
+                :MAX_HALLUCINATION_RETRIES
+            ]
             retry_success = False
 
             for i, temp in enumerate(fallback_temperatures):
@@ -778,7 +782,7 @@ class ASRSession:
             self._discard_queued_audio()
             # A worker that died before task_done() can leave Queue.join's
             # private counter poisoned. A fresh queue makes later sessions safe.
-            self._audio_queue = asyncio.Queue(maxsize=128)
+            self._audio_queue = asyncio.Queue(maxsize=AUDIO_QUEUE_MAX_CHUNKS)
         else:
             self._draining_generation = None
 

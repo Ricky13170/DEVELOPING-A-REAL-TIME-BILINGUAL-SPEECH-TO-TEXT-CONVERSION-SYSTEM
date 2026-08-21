@@ -27,7 +27,7 @@ except ImportError:
     AIORTC_AVAILABLE = False
     print("[WebRTC] aiortc not installed — WebRTC disabled, using WebSocket fallback")
 
-from backend.config import SAMPLE_RATE
+from backend.config import SAMPLE_RATE, WEBRTC_EMIT_SEC
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class WebRTCTransport:
         self._consumer_tasks = set()
         self._pending_audio = []
         self._pending_samples = 0
-        self._emit_samples = int(SAMPLE_RATE * 0.16)
+        self._emit_samples = int(SAMPLE_RATE * WEBRTC_EMIT_SEC)
         self._resampler = AudioResampler(
             format="fltp",
             layout="mono",

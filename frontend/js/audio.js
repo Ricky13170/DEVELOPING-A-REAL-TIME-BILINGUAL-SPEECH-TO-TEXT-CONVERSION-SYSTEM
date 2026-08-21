@@ -1,6 +1,3 @@
-const SAMPLE_RATE = 16000;
-const SEND_INTERVAL_MS = 250;
-
 function linearResample(buffer, fromRate, toRate) {
     if (fromRate === toRate) return buffer;
 
@@ -59,6 +56,8 @@ class AudioManager {
         this.processedStreamDestination = null;
         this.silentGainNode = null;
         this.sourceSampleRate = 48000;
+        this.targetSampleRate = null;
+        this.sendIntervalMs = null;
         this.isRecording = false;
         this.onAudioData = null;
         this.onLevelUpdate = null;
@@ -78,6 +77,19 @@ class AudioManager {
         // WebRTC: when true, audio is sent via WebRTC media track
         // and base64/WebSocket sending is skipped
         this._useWebRTC = false;
+    }
+
+    setRuntimeConfig({ sampleRate, sendIntervalMs }) {
+        const parsedRate = Number(sampleRate);
+        const parsedInterval = Number(sendIntervalMs);
+        if (!Number.isFinite(parsedRate) || parsedRate <= 0) {
+            throw new Error('Invalid sample rate from backend');
+        }
+        if (!Number.isFinite(parsedInterval) || parsedInterval <= 0) {
+            throw new Error('Invalid audio interval from backend');
+        }
+        this.targetSampleRate = parsedRate;
+        this.sendIntervalMs = parsedInterval;
     }
 
     async init() {
@@ -127,7 +139,7 @@ class AudioManager {
                 noiseSuppression: true,
                 autoGainControl: true,
                 channelCount: 1,
-                sampleRate: { ideal: 16000 }
+                sampleRate: { ideal: this.targetSampleRate }
             }
         };
 
@@ -147,7 +159,7 @@ class AudioManager {
                 ? {
                     echoCancellation: false,
                     noiseSuppression: false,
-                    sampleRate: { ideal: 16000 }
+                    sampleRate: { ideal: this.targetSampleRate }
                 }
                 : false
         });
@@ -193,7 +205,7 @@ class AudioManager {
             audio: {
                 echoCancellation: false,
                 noiseSuppression: false,
-                sampleRate: { ideal: 16000 }
+                sampleRate: { ideal: this.targetSampleRate }
             }
         });
 
@@ -210,6 +222,9 @@ class AudioManager {
      * @param {'microphone' | 'computer' | 'screen' | 'mixed'} source
      */
     async startRecording(source = 'microphone') {
+        if (!this.targetSampleRate || !this.sendIntervalMs) {
+            throw new Error('Audio runtime config is not loaded from backend');
+        }
         await this.init();
 
         if (this.audioContext.state === 'suspended') {
@@ -289,10 +304,10 @@ class AudioManager {
 
         this.pendingChunks = [];
         this.pendingLength = 0;
-        this.sendInterval = setInterval(() => this.flushBuffer(), SEND_INTERVAL_MS);
+        this.sendInterval = setInterval(() => this.flushBuffer(), this.sendIntervalMs);
 
         this.isRecording = true;
-        console.log('[Audio] Recording started (' + source + '), resampling', this.sourceSampleRate, '->', SAMPLE_RATE);
+        console.log('[Audio] Recording started (' + source + '), resampling', this.sourceSampleRate, '->', this.targetSampleRate);
     }
 
     processAudioChunk(inputData, measuredRms = null) {
@@ -325,7 +340,7 @@ class AudioManager {
 
         if (this.useWebRTC) return;
 
-        const float32 = linearResample(nativeAudio, this.sourceSampleRate, SAMPLE_RATE);
+        const float32 = linearResample(nativeAudio, this.sourceSampleRate, this.targetSampleRate);
 
         const int16 = float32ToInt16(float32);
         const base64 = int16ToBase64(int16);

@@ -1,17 +1,38 @@
 # TheDuo Edge Interpreter
 
-CPU-only Vietnamese ↔ English speech transcription and translation for frontline communication.
+Vietnamese ↔ English speech transcription and translation for frontline communication.
 
 ## Lightweight pipeline
 
 ```text
 Microphone → WebRTC/WebSocket → energy VAD
-           → Faster-Whisper tiny INT8 (CPU)
+           → Faster-Whisper medium INT8
            → OPUS-MT VI↔EN beam 1 (CPU, lazy load)
            → bilingual transcript
 ```
 
-The local runtime never selects CUDA. BARTpho, WhisperX, Pyannote, DeepFilterNet, NLLB, repeated ASR retries, and second-pass translation are not in the realtime path.
+The default local dependency lock and Docker image are CPU-only. Modal supplies the T4 CUDA runtime remotely. BARTpho, WhisperX, Pyannote, DeepFilterNet, NLLB, repeated ASR retries, and second-pass translation are not in the realtime path.
+
+## Test on Modal (recommended)
+
+This keeps model installation and inference off the local machine:
+
+```powershell
+uvx modal setup
+uvx modal serve main.py
+```
+
+Open the HTTPS URL printed by Modal. The remote profile uses Faster-Whisper Medium on one T4; OPUS-MT runs on the container CPU. Modal serves browser audio through the WebSocket fallback because direct WebRTC media requires a TURN/UDP deployment.
+
+For a persistent URL after the smoke test:
+
+```powershell
+uvx modal deploy main.py
+```
+
+`main.py` remains the only application entrypoint. Modal is supplied by `uvx`, so it is not added to the project lockfile or model runtime.
+
+Copy `.env.example` to `.env` when you want to change a setting. All environment variables are parsed in `backend/config.py`; `main.py` and the feature modules only consume that centralized configuration.
 
 ## Run locally
 
@@ -25,12 +46,12 @@ uv run python main.py
 
 `main.py` is the only application entrypoint; Docker uses the same file.
 
-Open `http://localhost:8000`. The first run downloads Whisper Tiny and the VI→EN OPUS-MT checkpoint. The EN→VI checkpoint is downloaded only after switching direction.
+Open `http://localhost:8000`. The first run downloads Whisper Medium and the VI→EN OPUS-MT checkpoint. The EN→VI checkpoint is downloaded only after switching direction.
 
-For better ASR accuracy, with higher CPU latency:
+For the largest accuracy profile, with much higher resource use:
 
 ```powershell
-uv run python main.py --whisper-model base
+uv run python main.py --whisper-model large-v3
 ```
 
 WebRTC is attempted only for local direct connections. If `aiortc` or ICE is unavailable, audio automatically uses WebSocket.
@@ -46,7 +67,7 @@ Set `INSTALL_WEBRTC=1` before building if the container needs WebRTC. `.dockerig
 ## Defaults
 
 ```dotenv
-WHISPER_MODEL=tiny
+WHISPER_MODEL=medium
 ASR_DEVICE=cpu
 ASR_COMPUTE_TYPE=int8
 CPU_THREADS=2

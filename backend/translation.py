@@ -8,7 +8,18 @@ from typing import Optional
 
 import torch
 
-from backend.config import CPU_THREADS
+from backend.config import (
+    CPU_THREADS,
+    MODEL_CACHE_DIR,
+    TRANSLATION_DEVICE,
+    TRANSLATION_MODEL_EN_VI,
+    TRANSLATION_MODEL_VI_EN,
+    TRANSLATION_MAX_INPUT_LENGTH,
+    TRANSLATION_MAX_OUTPUT_LENGTH,
+    TRANSLATION_NUM_BEAMS,
+    TRANSLATION_SRC_LANG,
+    TRANSLATION_TGT_LANG,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +32,8 @@ class MarianTranslator:
     """
 
     MODEL_IDS = {
-        ("vi", "en"): "Helsinki-NLP/opus-mt-vi-en",
-        ("en", "vi"): "Helsinki-NLP/opus-mt-en-vi",
+        ("vi", "en"): TRANSLATION_MODEL_VI_EN,
+        ("en", "vi"): TRANSLATION_MODEL_EN_VI,
     }
 
     _LANG_ALIASES = {
@@ -38,10 +49,10 @@ class MarianTranslator:
 
     def __init__(
         self,
-        src_lang: str = "vie_Latn",
-        tgt_lang: str = "eng_Latn",
-        device: str = "cpu",
-        cache_dir: Optional[str] = None,
+        src_lang: str = TRANSLATION_SRC_LANG,
+        tgt_lang: str = TRANSLATION_TGT_LANG,
+        device: str = TRANSLATION_DEVICE,
+        cache_dir: Optional[str] = MODEL_CACHE_DIR,
         vi_en_model: Optional[str] = None,
         en_vi_model: Optional[str] = None,
     ):
@@ -50,8 +61,8 @@ class MarianTranslator:
         self.device = device
         self.cache_dir = cache_dir
         self.model_ids = {
-            ("vi", "en"): vi_en_model or self.MODEL_IDS[("vi", "en")],
-            ("en", "vi"): en_vi_model or self.MODEL_IDS[("en", "vi")],
+            ("vi", "en"): vi_en_model or TRANSLATION_MODEL_VI_EN,
+            ("en", "vi"): en_vi_model or TRANSLATION_MODEL_EN_VI,
         }
 
         default_direction = self._direction(src_lang, tgt_lang)
@@ -162,7 +173,7 @@ class MarianTranslator:
         text: str,
         src_lang: Optional[str] = None,
         tgt_lang: Optional[str] = None,
-        max_length: int = 256,
+        max_length: int = TRANSLATION_MAX_OUTPUT_LENGTH,
     ) -> str:
         if not text or not text.strip():
             return ""
@@ -189,7 +200,7 @@ class MarianTranslator:
                     source_text,
                     return_tensors="pt",
                     truncation=True,
-                    max_length=256,
+                    max_length=TRANSLATION_MAX_INPUT_LENGTH,
                 )
                 model_device = next(model.parameters()).device
                 inputs = {
@@ -201,7 +212,7 @@ class MarianTranslator:
                     outputs = model.generate(
                         **inputs,
                         max_length=max_length,
-                        num_beams=1,
+                        num_beams=TRANSLATION_NUM_BEAMS,
                         do_sample=False,
                     )
 

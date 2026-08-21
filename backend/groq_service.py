@@ -3,7 +3,13 @@ import logging
 import asyncio
 import re
 from typing import Optional
-from backend.config import GROQ_API_KEY, GROQ_MODEL, GROQ_TIMEOUT
+from backend.config import (
+    GROQ_API_KEY,
+    GROQ_MAX_TOKENS,
+    GROQ_MODEL,
+    GROQ_TEMPERATURE,
+    GROQ_TIMEOUT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -234,8 +240,8 @@ Answer:"""
                 },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3,
-            max_tokens=1024,
+            temperature=GROQ_TEMPERATURE,
+            max_tokens=GROQ_MAX_TOKENS,
             timeout=GROQ_TIMEOUT,
         )
         

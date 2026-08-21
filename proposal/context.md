@@ -10,9 +10,9 @@
 ## Verified update — 19/08/2026
 
 - The official template weights are: AI approach/design **35%**, hardware/device **25%**, business **15%**, problem/impact **15%**, and team/execution **10%**.
-- The judged product is an **offline, on-device** translator. The repository now exposes one CPU runtime and includes no cloud-GPU execution path.
+- The judged product is an **offline, on-device** translator. Modal T4 is used only for remote development smoke tests; it is not presented as Edge deployment evidence.
 - Evaluation targets to design around: real-time factor **RTF < 1.0** and less than **2 seconds** from detected end-of-speech to the start of translated speech. These are competition targets, not measured project results yet.
-- The current local reference pipeline is CPU-only: Faster-Whisper `tiny` INT8, adaptive energy VAD, and lazy OPUS-MT VI↔EN with beam size 1. `base` remains an accuracy-oriented CPU option. BARTpho, WhisperX/Pyannote, NLLB, repeated ASR retries, and second-pass translation are removed from the real-time path.
+- The current reference pipeline uses Faster-Whisper `medium` (T4 smoke profile; CPU INT8 fallback), adaptive energy VAD, and lazy OPUS-MT VI↔EN with beam size 1. `large-v3` remains an accuracy-oriented option. BARTpho, WhisperX/Pyannote, NLLB, repeated ASR retries, and second-pass translation are removed from the real-time path.
 - WebRTC is an optional transport for local/LAN testing. Binary WebSocket remains the reliable fallback when direct ICE connectivity is unavailable.
 - The current Helsinki-NLP OPUS-MT VI↔EN checkpoints are Apache-2.0. Their quality still needs clean/noisy operational-domain benchmarking before any product claim.
 
@@ -29,7 +29,7 @@ Official working links:
 
 Current implementation snapshot:
 
-- Implemented: CPU-only local/Docker runtime, Faster-Whisper Tiny INT8, lazy OPUS-MT VI↔EN beam 1, adaptive energy VAD, bounded serial audio worker, tail flush, measured ASR/NMT timing fields, local WebRTC with WebSocket fallback, industrial templates, transport badge, and offline-by-default Groq behavior.
+- Implemented: CPU local/Docker fallback, optional Modal T4 smoke runtime, Faster-Whisper Medium, lazy OPUS-MT VI↔EN beam 1, adaptive energy VAD, bounded serial audio worker, tail flush, measured ASR/NMT timing fields, local WebRTC with WebSocket fallback, industrial templates, transport badge, and offline-by-default Groq behavior.
 - Removed from realtime runtime: BARTpho/PEFT, WhisperX, Pyannote, DeepFilterNet, NLLB, repeated ASR retries, second-pass NMT, CUDA auto-selection, and four dead backend modules.
 - Still required before claiming a complete OneVoice prototype: offline TTS, deterministic safety alert UI, glossary enforcement, real clean/noisy benchmarks, power/RAM measurements, and an actual Qualcomm/QNN on-device port. Desktop or cloud-GPU results alone are not Edge deployment evidence.
 
@@ -313,16 +313,16 @@ The guiding principle is:
 
 ## 8.1 ASR
 
-Initial candidate:
+Current reference candidate:
 
 ```text
-Whisper Small
+Whisper Medium
 ```
 
-Fallback if Edge performance is insufficient:
+Accuracy-oriented cloud comparison:
 
 ```text
-Whisper Base
+Whisper Large-v3
 ```
 
 Potential optimization path:
@@ -662,7 +662,7 @@ backend/
 
 frontend/         # browser UI
 tests/            # fast smoke tests without model downloads
-main.py           # single CPU entrypoint
+main.py           # single local/Docker/Modal entrypoint
 ```
 
 Do not add repository/service/controller/DTO layers until the project actually

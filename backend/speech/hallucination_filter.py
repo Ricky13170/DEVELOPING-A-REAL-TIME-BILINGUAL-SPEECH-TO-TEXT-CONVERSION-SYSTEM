@@ -3,10 +3,16 @@ import re
 from collections import deque
 import logging
 
+from backend.config import (
+    HALLUCINATION_HISTORY_SIZE,
+    HALLUCINATION_LONG_TEXT_WORDS,
+    HALLUCINATION_QUIET_RMS,
+)
+
 logger = logging.getLogger(__name__)
 
 class HallucinationFilter:
-    def __init__(self, history_size: int = 5):
+    def __init__(self, history_size: int = HALLUCINATION_HISTORY_SIZE):
 
         self.recent_texts = deque(maxlen=history_size)
 
@@ -76,7 +82,7 @@ class HallucinationFilter:
 
         # Energy VAD already rejects silence. Do not reject valid quiet speech
         # merely because ASR normalizes it before inference.
-        if audio_rms < 0.003 and len(words) > 6:
+        if audio_rms < HALLUCINATION_QUIET_RMS and len(words) > HALLUCINATION_LONG_TEXT_WORDS:
             logger.debug(f"Audio-text mismatch: RMS={audio_rms:.4f}, words={len(words)}")
             return True, "quiet_audio_long_text"
 

@@ -1,16 +1,23 @@
 import numpy as np
 from backend.config import (
-    SAMPLE_RATE, PROB_DROP_THRESHOLD, CONTINUOUS_SPEECH_PARTIAL_SEC,
-    PRE_SPEECH_SEC
+    CONTINUOUS_SPEECH_PARTIAL_SEC,
+    MAX_SEGMENT_SEC,
+    OVERLAP_SEC,
+    PRE_SPEECH_SEC,
+    PROB_DROP_THRESHOLD,
+    SAMPLE_RATE,
+    SEGMENT_MIN_EMIT_SEC,
+    SEGMENT_PREVIOUS_PROB_THRESHOLD,
+    SILENCE_LIMIT,
 )
 
 class SpeechSegmentBuffer:
     def __init__(
         self,
-        sample_rate: int = 16000,
-        max_sec: float = 3.1,
-        overlap_sec: float = 0.5,
-        silence_limit: float = 0.6,
+        sample_rate: int = SAMPLE_RATE,
+        max_sec: float = MAX_SEGMENT_SEC,
+        overlap_sec: float = OVERLAP_SEC,
+        silence_limit: float = SILENCE_LIMIT,
         pre_speech_sec: float = PRE_SPEECH_SEC
     ):
         self.sr = sample_rate
@@ -60,8 +67,8 @@ class SpeechSegmentBuffer:
 
             prob_drop = self.prev_prob - speech_prob
             if (prob_drop >= PROB_DROP_THRESHOLD
-                and total_sec >= 1.0
-                and self.prev_prob >= 0.6):
+                and total_sec >= SEGMENT_MIN_EMIT_SEC
+                and self.prev_prob >= SEGMENT_PREVIOUS_PROB_THRESHOLD):
 
                 old_prob = self.prev_prob
                 chunk = np.concatenate(self.segment)
@@ -85,7 +92,7 @@ class SpeechSegmentBuffer:
 
             if (speech_duration >= CONTINUOUS_SPEECH_PARTIAL_SEC
                 and since_last_partial >= CONTINUOUS_SPEECH_PARTIAL_SEC
-                and total_sec >= 1.0):
+                and total_sec >= SEGMENT_MIN_EMIT_SEC):
                 self.last_partial_emit_ts = now_ts
                 chunk = np.concatenate(self.segment)
                 return 'partial', chunk

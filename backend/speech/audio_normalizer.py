@@ -2,24 +2,38 @@ import numpy as np
 from scipy.signal import butter, lfilter
 import logging
 
+from backend.config import (
+    NORMALIZER_HIGH_PASS_HZ,
+    NORMALIZER_HISTORY_SIZE,
+    NORMALIZER_MAX_GAIN,
+    NORMALIZER_MIN_AUDIO_SEC,
+    NORMALIZER_MIN_GAIN,
+    NORMALIZER_NOISE_FLOOR,
+    NORMALIZER_RMS_THRESHOLD,
+    NORMALIZER_SOFT_CLIP_THRESHOLD,
+    NORMALIZER_TARGET_DB,
+    NORMALIZER_UPDATE_INTERVAL,
+    SAMPLE_RATE,
+)
+
 logger = logging.getLogger(__name__)
 
 
 class WhisperAudioNormalizer:
-    def __init__(self, target_dB: float = -20.0, sample_rate: int = 16000):
+    def __init__(self, target_dB: float = NORMALIZER_TARGET_DB, sample_rate: int = SAMPLE_RATE):
         self.target_dB = target_dB
         self.target_rms = 10 ** (target_dB / 20)
         self.sample_rate = sample_rate
 
-        self.min_gain = 0.3
-        self.max_gain = 5.0
+        self.min_gain = NORMALIZER_MIN_GAIN
+        self.max_gain = NORMALIZER_MAX_GAIN
 
         # Noise gate
-        self.noise_floor = 0.001
+        self.noise_floor = NORMALIZER_NOISE_FLOOR
 
         logger.info(f"[Normalizer] Target: {target_dB}dBFS, Gain range: {self.min_gain}x - {self.max_gain}x")
 
-    def highpass_filter(self, audio: np.ndarray, cutoff: int = 80) -> np.ndarray:
+    def highpass_filter(self, audio: np.ndarray, cutoff: int = NORMALIZER_HIGH_PASS_HZ) -> np.ndarray:
 
         nyq = 0.5 * self.sample_rate
         normal_cutoff = cutoff / nyq
@@ -31,7 +45,7 @@ class WhisperAudioNormalizer:
         b, a = butter(2, normal_cutoff, btype='high')
         return lfilter(b, a, audio)
 
-    def calculate_rms_speech_only(self, audio: np.ndarray, threshold: float = 0.005) -> float:
+    def calculate_rms_speech_only(self, audio: np.ndarray, threshold: float = NORMALIZER_RMS_THRESHOLD) -> float:
 
         speech = audio[np.abs(audio) > threshold]
 
@@ -40,7 +54,7 @@ class WhisperAudioNormalizer:
 
         return np.sqrt(np.mean(speech ** 2))
 
-    def soft_clip(self, audio: np.ndarray, threshold: float = 0.95) -> np.ndarray:
+    def soft_clip(self, audio: np.ndarray, threshold: float = NORMALIZER_SOFT_CLIP_THRESHOLD) -> np.ndarray:
 
         peak = np.max(np.abs(audio))
 
@@ -53,11 +67,11 @@ class WhisperAudioNormalizer:
 
     def normalize(self, audio: np.ndarray) -> tuple[np.ndarray, dict]:
 
-        if len(audio) < self.sample_rate * 0.5:
+        if len(audio) < self.sample_rate * NORMALIZER_MIN_AUDIO_SEC:
             logger.debug("[Normalizer] Audio too short, skipping normalization")
             return audio, {"skipped": True}
 
-        audio = self.highpass_filter(audio, cutoff=80)
+        audio = self.highpass_filter(audio)
 
         rms_original = self.calculate_rms_speech_only(audio)
         original_dB = 20 * np.log10(rms_original + 1e-10)
@@ -67,7 +81,7 @@ class WhisperAudioNormalizer:
 
         audio = audio * gain
 
-        audio = self.soft_clip(audio, threshold=0.95)
+        audio = self.soft_clip(audio)
 
         rms_after_clip = self.calculate_rms_speech_only(audio)
         final_gain = self.target_rms / rms_after_clip
@@ -97,13 +111,13 @@ class WhisperAudioNormalizer:
 
 
 class AdaptiveNormalizer:
-    def __init__(self, target_dB: float = -20.0, sample_rate: int = 16000):
+    def __init__(self, target_dB: float = NORMALIZER_TARGET_DB, sample_rate: int = SAMPLE_RATE):
         self.base_normalizer = WhisperAudioNormalizer(target_dB, sample_rate)
 
         # Adaptive parameters
         self.rms_history = []
-        self.max_history = 50
-        self.noise_floor = 0.001
+        self.max_history = NORMALIZER_HISTORY_SIZE
+        self.noise_floor = NORMALIZER_NOISE_FLOOR
         self.noise_floor_updated = False
 
     def update_noise_floor(self, audio: np.ndarray):
@@ -117,7 +131,10 @@ class AdaptiveNormalizer:
             self.rms_history.pop(0)
 
         # Update noise floor every 10 segments
-        if len(self.rms_history) >= 10 and len(self.rms_history) % 10 == 0:
+        if (
+            len(self.rms_history) >= NORMALIZER_UPDATE_INTERVAL
+            and len(self.rms_history) % NORMALIZER_UPDATE_INTERVAL == 0
+        ):
             # Noise floor = 20th percentile of RMS history
             sorted_rms = sorted(self.rms_history)
             self.noise_floor = sorted_rms[len(sorted_rms) // 5]

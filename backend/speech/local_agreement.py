@@ -1,9 +1,11 @@
 import logging
 
+from backend.config import AGREEMENT_N
+
 logger = logging.getLogger(__name__)
 
 class LocalAgreement:
-    def __init__(self, n: int = 2):
+    def __init__(self, n: int = AGREEMENT_N):
         """
         Args:
             n: Number of consecutive agreements needed (default: 2)

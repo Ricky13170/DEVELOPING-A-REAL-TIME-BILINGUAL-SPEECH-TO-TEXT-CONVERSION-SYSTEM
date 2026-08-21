@@ -7,22 +7,29 @@ import numpy as np
 
 from backend.speech.audio_normalizer import AdaptiveNormalizer
 from backend.config import (
+    ASR_DEVICE,
+    ASR_BEST_OF,
     ASR_BEAM_SIZE,
+    ASR_COMPRESSION_RATIO_THRESHOLD,
     ASR_COMPUTE_TYPE,
+    ASR_NO_SPEECH_THRESHOLD,
+    ASR_NUM_WORKERS,
+    ASR_REPETITION_PENALTY,
+    ASR_TEMPERATURE,
     ASR_WORD_TIMESTAMPS,
     CPU_THREADS,
+    SAMPLE_RATE,
+    WHISPER_LANGUAGE,
+    WHISPER_MODEL,
 )
 
 logger = logging.getLogger(__name__)
-SAMPLE_RATE = 16000
-
-
 class WhisperASR:
     def __init__(
         self,
-        model_size="small",
-        language=None,
-        device="cpu",
+        model_size=WHISPER_MODEL,
+        language=WHISPER_LANGUAGE,
+        device=ASR_DEVICE,
         cache_dir=None,
         compute_type=None,
     ):
@@ -52,7 +59,7 @@ class WhisperASR:
             device=self.device,
             compute_type=self.compute_type,
             download_root=self.cache_dir,
-            num_workers=1,
+            num_workers=ASR_NUM_WORKERS,
             cpu_threads=CPU_THREADS,
         )
         logger.info("Faster-Whisper loaded")
@@ -80,13 +87,13 @@ class WhisperASR:
                 language=effective_language,
                 task="transcribe",
                 beam_size=ASR_BEAM_SIZE,
-                best_of=1,
-                temperature=0.0 if temperature is None else temperature,
+                best_of=ASR_BEST_OF,
+                temperature=ASR_TEMPERATURE if temperature is None else temperature,
                 initial_prompt=prompt or None,
                 condition_on_previous_text=condition_on_previous_text,
-                repetition_penalty=1.15,
-                no_speech_threshold=0.6,
-                compression_ratio_threshold=2.4,
+                repetition_penalty=ASR_REPETITION_PENALTY,
+                no_speech_threshold=ASR_NO_SPEECH_THRESHOLD,
+                compression_ratio_threshold=ASR_COMPRESSION_RATIO_THRESHOLD,
                 word_timestamps=ASR_WORD_TIMESTAMPS,
                 vad_filter=False,
             )

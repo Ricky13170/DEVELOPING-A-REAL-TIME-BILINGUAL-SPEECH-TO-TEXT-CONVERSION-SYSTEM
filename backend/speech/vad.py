@@ -5,8 +5,10 @@ import numpy as np
 from backend.config import (
     VAD_ALPHA,
     VAD_BASE_THRESHOLD,
+    VAD_INITIAL_NOISE,
     VAD_MAX_NOISE,
     VAD_MIN_NOISE,
+    VAD_SPEECH_PROB_THRESHOLD,
 )
 
 
@@ -24,7 +26,7 @@ class VADManager:
         self.alpha = alpha
         self.min_noise = min_noise
         self.max_noise = max_noise
-        self._initial_noise = max(min_noise, 0.003)
+        self._initial_noise = max(min_noise, VAD_INITIAL_NOISE)
         self.noise_level = self._initial_noise
         self._last_prob = 0.0
 
@@ -64,5 +66,5 @@ class VADManager:
             "noise_level": self.noise_level,
             "threshold": threshold,
             "speech_probability": self._last_prob,
-            "is_speech": self._last_prob >= 0.5,
+            "is_speech": self._last_prob >= VAD_SPEECH_PROB_THRESHOLD,
         }

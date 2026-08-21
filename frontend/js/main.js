@@ -64,6 +64,10 @@ class ASRApp {
       const res = await fetch("/api/status");
       if (res.ok) {
         const data = await res.json();
+        this.audioMgr.setRuntimeConfig({
+          sampleRate: data.sample_rate,
+          sendIntervalMs: data.audio_send_interval_ms,
+        });
         this.serverReady = true;
         this.webRTCAllowed = Boolean(data.webrtc_available);
         this.uiMgr.updateTransportStatus("ready");

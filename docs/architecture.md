@@ -13,7 +13,7 @@ without adding a boundary.
 ```text
 .
 ├── backend/
-│   ├── config.py                 # lightweight runtime settings
+│   ├── config.py                 # all environment/runtime settings
 │   ├── translation.py            # local VI↔EN translation feature
 │   ├── groq_service.py            # optional cloud-only integration
 │   ├── web_app.py                 # HTTP/WebSocket application factory
@@ -31,7 +31,7 @@ without adding a boundary.
 ├── tests/                         # fast tests that do not download models
 ├── docs/                          # architecture + public project page
 ├── proposal/                      # OneVoice submission working material
-└── main.py                        # single CPU composition root
+└── main.py                        # one local/Docker/Modal composition root
 ```
 
 ## Dependency direction
@@ -78,8 +78,9 @@ there:
 
 - `README.md`, `pyproject.toml`, `uv.lock`, `.python-version`, and `.env.example`
   describe and reproduce the application environment.
-- `main.py` is the single CPU composition root used by both direct and Docker
-  execution.
+- `main.py` is the single composition root used by direct, Docker, and Modal
+  execution. User-editable values live in `.env`; only `backend/config.py`
+  reads and normalizes environment variables.
 - `Dockerfile`, `docker-compose.yml`, and `.dockerignore` form the conventional
   root Docker build context.
 

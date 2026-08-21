@@ -91,7 +91,7 @@
                 <div class="pipe-step" data-step="2">
                     <div class="pipe-icon">🧠</div>
                     <div class="pipe-label">Faster-Whisper ASR</div>
-                    <div class="pipe-detail">Tiny INT8 CPU<br>Context Priming</div>
+                    <div class="pipe-detail">Medium on Modal T4<br>Context Priming</div>
                 </div>
                 <div class="pipe-arrow">→</div>
                 <div class="pipe-step" data-step="3">
@@ -167,7 +167,7 @@
                 <p>One offline-first CPU pipeline shared by direct and Docker execution</p>
             </div>
             <div class="tech-stack">
-                <div class="tech-item"><span class="tech-badge asr">ASR</span> Faster-Whisper Tiny INT8</div>
+                <div class="tech-item"><span class="tech-badge asr">ASR</span> Faster-Whisper Medium</div>
                 <div class="tech-item"><span class="tech-badge vad">VAD</span> Adaptive energy gate</div>
                 <div class="tech-item"><span class="tech-badge nlp">Gate</span> Confidence + repetition checks</div>
                 <div class="tech-item"><span class="tech-badge nmt">NMT</span> OPUS-MT VI ↔ EN</div>
@@ -242,24 +242,22 @@
             <div class="section-header">
                 <span class="section-tag">Getting Started</span>
                 <h2>Reproducible Test Profiles</h2>
-                <p>Use Python 3.11 and the same CPU entrypoint in every local test</p>
+                <p>Use the same entrypoint for remote smoke tests and local CPU validation</p>
             </div>
             <div class="steps-grid">
                 <div class="step-card">
                     <div class="step-num">⚡</div>
-                    <h3>Local CPU</h3>
-                    <pre><code>git clone https://github.com/Ricky13170/DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM.git
-cd DEVELOPING-A-REAL-TIME-BILINGUAL-SPEECH-TO-TEXT-CONVERSION-SYSTEM
-uv python install 3.11
-uv sync --locked --extra webrtc
-uv run python main.py</code></pre>
+                    <h3>Modal T4 Smoke</h3>
+                    <pre><code># Models and inference stay on Modal
+uvx modal setup
+uvx modal serve main.py</code></pre>
                 </div>
                 <div class="step-card">
                     <div class="step-num">🖥️</div>
                     <h3>Higher Accuracy</h3>
-                    <pre><code># Still CPU-only, but slower than Tiny
+                    <pre><code># Largest accuracy profile
 uv run python main.py \
-  --whisper-model base</code></pre>
+  --whisper-model large-v3</code></pre>
                 </div>
                 <div class="step-card">
                     <div class="step-num">🐳</div>
