@@ -5,16 +5,10 @@ services:
   app:
     build:
       context: .
-      args:
-        INSTALL_WEBRTC: "${INSTALL_WEBRTC:-0}"
-        INSTALL_GROQ: "${INSTALL_GROQ:-0}"
     ports:
       - "8000:8000"
     volumes:
       - model_cache:/app/model_cache
-    env_file:
-      - path: .env
-        required: false
     shm_size: "1gb"
 
 volumes:

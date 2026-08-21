@@ -1,7 +1,6 @@
 """Fast architecture/configuration checks; never download model weights."""
 
 import ast
-import os
 import unittest
 import subprocess
 import sys
@@ -32,7 +31,22 @@ class ProjectSmokeTests(unittest.TestCase):
         main_imports = imported_modules(PROJECT_ROOT / "main.py")
         self.assertIn("modal", main_imports)
         self.assertNotIn("torch", main_imports)
-        self.assertNotIn("backend.realtime.session", main_imports)
+
+        code = """
+import sys
+import main
+print('SESSION_EAGER=' + str('backend.realtime.session' in sys.modules))
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            result.stdout.strip().splitlines()[-1],
+            "SESSION_EAGER=False",
+        )
 
     def test_lockfile_matches_lightweight_runtime(self):
         """Keep removed training/heavy pipeline packages out of the lockfile."""
@@ -111,31 +125,20 @@ print('MODEL_IMPORTS=' + ','.join(blocked))
             check=True,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "WHISPER_MODEL": "medium",
-                "ASR_DEVICE": "cpu",
-                "ASR_COMPUTE_TYPE": "int8",
-                "TRANSLATION_DEVICE": "cpu",
-            },
         )
         self.assertEqual(
             result.stdout.strip().splitlines()[-1],
             "MODEL_IMPORTS=",
         )
 
-    def test_main_entrypoint_applies_config_before_session_import(self):
+    def test_main_and_session_share_the_same_config(self):
         code = """
-from types import SimpleNamespace
 import main
-cfg = main.apply_config(
-    SimpleNamespace(whisper_model='large-v3', enable_groq=False)
-)
 from backend.realtime import session
 print(
-    cfg.ASR_DEVICE,
-    cfg.ASR_COMPUTE_TYPE,
-    cfg.TRANSLATION_DEVICE,
+    main.cfg.ASR_DEVICE,
+    main.cfg.ASR_COMPUTE_TYPE,
+    main.cfg.TRANSLATION_DEVICE,
     session.WHISPER_MODEL,
 )
 """
@@ -144,32 +147,25 @@ print(
             check=True,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "WHISPER_MODEL": "medium",
-                "ASR_DEVICE": "cpu",
-                "ASR_COMPUTE_TYPE": "int8",
-                "TRANSLATION_DEVICE": "cpu",
-            },
         )
-        self.assertEqual(result.stdout.strip().splitlines()[-1], "cpu int8 cpu large-v3")
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "cpu int8 cpu medium")
 
     def test_runtime_environment_reads_are_centralized(self):
-        config_path = PROJECT_ROOT / "backend" / "config.py"
         project_python_files = [
             PROJECT_ROOT / "main.py",
             *(PROJECT_ROOT / "backend").rglob("*.py"),
         ]
         for path in project_python_files:
-            if path == config_path:
-                continue
             source = path.read_text(encoding="utf-8")
-            self.assertNotIn("os.getenv(", source, f"Environment read outside config: {path}")
+            self.assertNotIn("os.getenv(", source, f"Environment override found: {path}")
             self.assertNotIn(
                 "os.environ.get(",
                 source,
-                f"Environment read outside config: {path}",
+                f"Environment override found: {path}",
             )
+
+        self.assertFalse((PROJECT_ROOT / ".env.example").exists())
+        self.assertNotIn("dotenv", imported_modules(PROJECT_ROOT / "main.py"))
 
     def test_whisper_profile_is_medium_or_larger(self):
         import backend.config as runtime_config
@@ -181,6 +177,30 @@ print(
         self.assertIn(
             runtime_config.MODAL_WHISPER_MODEL,
             runtime_config.SUPPORTED_WHISPER_MODELS,
+        )
+
+    def test_modal_profile_is_activated_before_session_import(self):
+        code = """
+import backend.config as cfg
+cfg.activate_modal_profile()
+from backend.realtime import session
+print(
+    session.ASR_DEVICE,
+    session.ASR_COMPUTE_TYPE,
+    session.TRANSLATION_DEVICE,
+    session.WHISPER_MODEL,
+    session.MODEL_CACHE_DIR,
+)
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            result.stdout.strip().splitlines()[-1],
+            "cuda int8_float16 cpu medium /cache",
         )
 
     def test_feature_packages_import_without_loading_models(self):

@@ -40,7 +40,7 @@ class WhisperASR:
         self.compute_type = compute_type or ASR_COMPUTE_TYPE
         self.model = None
         self._lock = threading.Lock()
-        self.normalizer = AdaptiveNormalizer(target_dB=-20.0, sample_rate=SAMPLE_RATE)
+        self.normalizer = AdaptiveNormalizer(sample_rate=SAMPLE_RATE)
 
     def load_model(self):
         if self.model is not None:

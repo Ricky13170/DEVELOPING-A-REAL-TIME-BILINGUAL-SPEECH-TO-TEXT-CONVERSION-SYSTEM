@@ -20,7 +20,6 @@ scipy>=1.14,<2
 fastapi>=0.115,<1
 uvicorn>=0.30,<1
 websockets>=13,<17
-python-dotenv>=1,<2
 
 # Optional integrations are intentionally excluded from the base runtime.
 # Install from pyproject.toml only when needed:

@@ -255,9 +255,10 @@ uvx modal serve main.py</code></pre>
                 <div class="step-card">
                     <div class="step-num">🖥️</div>
                     <h3>Higher Accuracy</h3>
-                    <pre><code># Largest accuracy profile
-uv run python main.py \
-  --whisper-model large-v3</code></pre>
+                    <pre><code># In backend/config.py
+WHISPER_MODEL = validate_whisper_model("large-v3")
+
+uv run python main.py</code></pre>
                 </div>
                 <div class="step-card">
                     <div class="step-num">🐳</div>

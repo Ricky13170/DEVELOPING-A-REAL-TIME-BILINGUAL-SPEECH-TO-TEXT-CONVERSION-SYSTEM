@@ -2,22 +2,13 @@
 
 Examples:
     python main.py
-    python main.py --whisper-model large-v3
     modal serve main.py
 """
 
-import argparse
 import asyncio
 import os
 import sys
 from pathlib import Path
-
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    pass
 
 import backend.config as cfg
 
@@ -46,7 +37,6 @@ if modal is not None:
             index_url=cfg.MODAL_TORCH_INDEX_URL,
         )
         .uv_pip_install(*cfg.MODAL_RUNTIME_REQUIREMENTS)
-        .env(cfg.modal_runtime_environment())
         .add_local_dir(
             PROJECT_ROOT / "backend",
             remote_path=f"{cfg.MODAL_REMOTE_ROOT}/backend",
@@ -54,6 +44,10 @@ if modal is not None:
         .add_local_dir(
             PROJECT_ROOT / "frontend",
             remote_path=f"{cfg.MODAL_REMOTE_ROOT}/frontend",
+        )
+        .add_local_file(
+            PROJECT_ROOT / "requirements.txt",
+            remote_path=f"{cfg.MODAL_REMOTE_ROOT}/requirements.txt",
         )
     )
 
@@ -79,6 +73,8 @@ if modal is not None:
 
         @modal.enter()
         def load_models(self):
+            cfg.activate_modal_profile()
+            apply_process_environment()
             if cfg.MODAL_REMOTE_ROOT not in sys.path:
                 sys.path.insert(0, cfg.MODAL_REMOTE_ROOT)
 
@@ -99,53 +95,20 @@ if modal is not None:
             )
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Run the bilingual ASR server locally on CPU"
-    )
-    parser.add_argument("--port", type=int, default=cfg.WEB_PORT, help="Server port")
-    parser.add_argument("--host", default=cfg.WEB_HOST, help="Server host")
-    parser.add_argument(
-        "--whisper-model",
-        default=None,
-        choices=cfg.SUPPORTED_WHISPER_MODELS,
-        help=f"Faster-Whisper model (default: {cfg.WHISPER_MODEL})",
-    )
-    parser.add_argument(
-        "--enable-groq",
-        action="store_true",
-        help="Enable optional cloud summary/context features",
-    )
-    parser.add_argument(
-        "--cache-dir",
-        default=cfg.MODEL_CACHE_DIR,
-        help="Directory used for downloaded model caches",
-    )
-    return parser.parse_args()
+def apply_process_environment():
+    """Expose centralized settings required by native model libraries."""
 
-
-def apply_config(args):
-    """Apply CLI overrides to the centralized configuration."""
-
-    whisper_override = args.whisper_model or cfg.WHISPER_MODEL
-    cfg.WHISPER_MODEL = cfg.validate_whisper_model(whisper_override)
-    os.environ.setdefault("OMP_NUM_THREADS", str(cfg.CPU_THREADS))
-    os.environ.setdefault("MKL_NUM_THREADS", str(cfg.CPU_THREADS))
-
-    groq_requested = args.enable_groq or cfg.ENABLE_GROQ
-    cfg.ENABLE_GROQ = bool(groq_requested and cfg.GROQ_API_KEY)
-    cfg.GROQ_API_KEY = cfg.GROQ_API_KEY if cfg.ENABLE_GROQ else ""
-    return cfg
+    os.environ["OMP_NUM_THREADS"] = str(cfg.CPU_THREADS)
+    os.environ["MKL_NUM_THREADS"] = str(cfg.CPU_THREADS)
+    os.environ["HF_HOME"] = cfg.HF_HOME
+    os.environ["TOKENIZERS_PARALLELISM"] = str(
+        cfg.TOKENIZERS_PARALLELISM
+    ).lower()
 
 
 def main():
-    args = parse_args()
-    cfg = apply_config(args)
-
-    cfg.MODEL_CACHE_DIR = os.path.abspath(args.cache_dir)
-    cfg.HF_HOME = os.path.join(cfg.MODEL_CACHE_DIR, "huggingface")
-    os.environ.setdefault("HF_HOME", cfg.HF_HOME)
-    os.makedirs(args.cache_dir, exist_ok=True)
+    apply_process_environment()
+    os.makedirs(cfg.MODEL_CACHE_DIR, exist_ok=True)
 
     print("=" * 60)
     print("  TheDuo Edge Server")
@@ -155,7 +118,7 @@ def main():
     print("  NMT     : OPUS-MT vi-en / en-vi (lazy)")
     print(f"  ASR type: {cfg.ASR_COMPUTE_TYPE}")
     print(f"  Groq    : {'ON (cloud extra)' if cfg.ENABLE_GROQ else 'OFF (offline core)'}")
-    print(f"  Cache   : {args.cache_dir}")
+    print(f"  Cache   : {cfg.MODEL_CACHE_DIR}")
     print("=" * 60)
 
     print("\nLoading models (first run may take a few minutes)...")
@@ -169,17 +132,22 @@ def main():
 
     web_app = create_web_app(
         service=service,
-        frontend_dir=os.path.join(os.path.dirname(__file__), "frontend"),
+        frontend_dir=PROJECT_ROOT / "frontend",
         deployment=cfg.LOCAL_DEPLOYMENT_NAME,
         compute_label=cfg.LOCAL_COMPUTE_LABEL,
     )
 
-    print(f"Server running at http://localhost:{args.port}")
+    print(f"Server running at http://localhost:{cfg.WEB_PORT}")
     print("Open this URL in your browser to start transcribing.\n")
 
     import uvicorn
 
-    uvicorn.run(web_app, host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(
+        web_app,
+        host=cfg.WEB_HOST,
+        port=cfg.WEB_PORT,
+        log_level="warning",
+    )
 
 
 if __name__ == "__main__":

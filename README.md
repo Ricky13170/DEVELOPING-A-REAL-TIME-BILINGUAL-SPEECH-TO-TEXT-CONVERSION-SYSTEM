@@ -32,7 +32,11 @@ uvx modal deploy main.py
 
 `main.py` remains the only application entrypoint. Modal is supplied by `uvx`, so it is not added to the project lockfile or model runtime.
 
-Copy `.env.example` to `.env` when you want to change a setting. All environment variables are parsed in `backend/config.py`; `main.py` and the feature modules only consume that centralized configuration.
+## Configure once
+
+Edit only `backend/config.py`. It is the single source for local, Docker, Modal, model, audio, segmentation, translation, and UI runtime values. The project does not read `.env` and command-line flags cannot override the configuration.
+
+Keep `GROQ_API_KEY` empty unless the optional Groq feature is intentionally enabled. Never commit a real secret.
 
 ## Run locally
 
@@ -48,10 +52,10 @@ uv run python main.py
 
 Open `http://localhost:8000`. The first run downloads Whisper Medium and the VI→EN OPUS-MT checkpoint. The EN→VI checkpoint is downloaded only after switching direction.
 
-For the largest accuracy profile, with much higher resource use:
+For the largest accuracy profile, change this one line in `backend/config.py`:
 
-```powershell
-uv run python main.py --whisper-model large-v3
+```python
+WHISPER_MODEL = validate_whisper_model("large-v3")
 ```
 
 WebRTC is attempted only for local direct connections. If `aiortc` or ICE is unavailable, audio automatically uses WebSocket.
@@ -62,21 +66,17 @@ WebRTC is attempted only for local direct connections. If `aiortc` or ICE is una
 docker compose up --build
 ```
 
-Set `INSTALL_WEBRTC=1` before building if the container needs WebRTC. `.dockerignore` excludes local environments and model caches.
+The Docker image uses the same `backend/config.py`. `.dockerignore` excludes local environments and model caches.
 
 ## Defaults
 
-```dotenv
-WHISPER_MODEL=medium
-ASR_DEVICE=cpu
-ASR_COMPUTE_TYPE=int8
-CPU_THREADS=2
-TRANSLATION_MODEL_VI_EN=Helsinki-NLP/opus-mt-vi-en
-TRANSLATION_MODEL_EN_VI=Helsinki-NLP/opus-mt-en-vi
-TRANSLATION_DEVICE=cpu
-ENABLE_PARTIAL_TRANSCRIPTS=false
-MAX_HALLUCINATION_RETRIES=0
-ENABLE_GROQ=false
+```python
+WHISPER_MODEL = validate_whisper_model("medium")
+ASR_DEVICE = "cpu"
+ASR_COMPUTE_TYPE = "int8"
+MODAL_GPU = "T4"
+MODAL_WHISPER_MODEL = validate_whisper_model("medium")
+MODAL_ASR_COMPUTE_TYPE = "int8_float16"
 ```
 
 Both OPUS-MT checkpoints are Apache-2.0. Groq remains an optional cloud extra and should stay disabled for offline tests.

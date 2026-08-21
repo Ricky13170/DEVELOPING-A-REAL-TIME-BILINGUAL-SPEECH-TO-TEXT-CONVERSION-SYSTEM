@@ -76,14 +76,14 @@ actual project rather than copying its largest example.
 The remaining root files stay there because tools and contributors expect them
 there:
 
-- `README.md`, `pyproject.toml`, `uv.lock`, `.python-version`, and `.env.example`
+- `README.md`, `pyproject.toml`, `uv.lock`, and `.python-version`
   describe and reproduce the application environment.
 - `main.py` is the single composition root used by direct, Docker, and Modal
-  execution. User-editable values live in `.env`; only `backend/config.py`
-  reads and normalizes environment variables.
+  execution. `backend/config.py` is the only user-editable runtime
+  configuration source; no environment or CLI override is applied.
 - `Dockerfile`, `docker-compose.yml`, and `.dockerignore` form the conventional
   root Docker build context.
 
 Generated environments and caches (`venv/`, `.venv/`, `__pycache__/`, model
-weights, and local `.env`) are ignored rather than reorganized into the source
+weights, and legacy local `.env`) are ignored rather than reorganized into the source
 tree.
